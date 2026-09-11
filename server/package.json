@@ -1,0 +1,31 @@
+{
+  "name": "tarororo-api",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=24.12.0"
+  },
+  "scripts": {
+    "start": "node --env-file-if-exists=.env --experimental-strip-types src/main.ts",
+    "dev": "node --env-file-if-exists=.env --watch --experimental-strip-types src/main.ts",
+    "worker": "node --env-file-if-exists=.env --experimental-strip-types src/worker/main.ts",
+    "worker:dev": "node --env-file-if-exists=.env --watch --experimental-strip-types src/worker/main.ts",
+    "typecheck": "tsc --noEmit",
+    "test": "node --env-file-if-exists=.env --experimental-strip-types --test tests/config.test.ts tests/auth.test.ts tests/reading-ai.test.ts",
+    "test:integration": "node --env-file-if-exists=.env --experimental-strip-types --test tests/api.test.ts tests/database.test.ts tests/readings.test.ts tests/reading-attempts.test.ts tests/reading-worker.test.ts",
+    "db:migrate": "node --env-file-if-exists=.env --experimental-strip-types src/db/migrate.ts",
+    "db:seed": "node --env-file-if-exists=.env --experimental-strip-types src/db/seed.ts"
+  },
+  "dependencies": {
+    "@fastify/cors": "^11.3.0",
+    "ajv": "^8.20.0",
+    "fastify": "^5.12.3",
+    "json-schema-to-ts": "^3.1.1",
+    "pg": "^8.23.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.20.2",
+    "@types/pg": "^8.23.1",
+    "typescript": "^7.0.2"
+  }
+}

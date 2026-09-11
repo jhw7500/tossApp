@@ -1,0 +1,2 @@
+ALTER TABLE interpretations DROP CONSTRAINT interpretations_tarot_card_id_locale_key;
+CREATE INDEX interpretations_tarot_card_locale_idx ON interpretations(tarot_card_id, locale);
