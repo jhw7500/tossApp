@@ -22,3 +22,7 @@ export function mergePage<T extends { id: string }>(current: Page<T>, incoming: 
     nextCursor: incoming.nextCursor,
   }
 }
+
+export function updateCurrentScope<State extends { scope: string }>(state: State, requestScope: string, update: (current: State) => State): State {
+  return state.scope === requestScope ? update(state) : state
+}
