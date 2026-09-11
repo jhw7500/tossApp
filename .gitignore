@@ -1,0 +1,24 @@
+# Local agent/runtime state
+.omx/
+.jhw/
+.superpowers/
+.worktrees/
+.claude/
+.codex/
+
+# Local environment and generated files
+.env
+.env.*
+!.env.example
+node_modules/
+dist/
+build/
+coverage/
+.cache/
+tmp/
+
+# Editor and OS files
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
