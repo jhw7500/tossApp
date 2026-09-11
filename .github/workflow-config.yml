@@ -1,0 +1,34 @@
+# Shared workflow configuration for jhw7500/automation.
+automation_ref: v1.73
+automation_commit: 3d60f3baaa45820f7260912efea3ffcf45c10b07
+
+review:
+  auto: true
+
+workflows:
+  claude:
+    enabled: true
+  claude-code-review:
+    enabled: true
+  gemini-auto-review:
+    enabled: false
+  gemini-chat:
+    enabled: false
+  gemini-dispatch:
+    enabled: false
+  gemini-invoke:
+    enabled: false
+  gemini-issue-triage:
+    enabled: false
+  gemini-scheduled-triage:
+    enabled: false
+  gemini-triage:
+    enabled: false
+  opencode:
+    enabled: false
+  opencode-auto-review:
+    enabled: false
+
+claude:
+  model: "claude-sonnet-4-6"
+

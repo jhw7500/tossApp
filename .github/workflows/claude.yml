@@ -1,0 +1,23 @@
+name: Claude Code
+run-name: jhw-review-comment-${{ github.event.comment.id || github.run_id }}
+
+on:
+  issue_comment:
+    types: [created]
+  pull_request_review_comment:
+    types: [created]
+  issues:
+    types: [opened, assigned]
+
+jobs:
+  claude:
+    permissions:
+      actions: read
+      contents: read
+      id-token: write
+      issues: read
+      pull-requests: read
+    uses: jhw7500/automation/.github/workflows/claude.yml@3d60f3baaa45820f7260912efea3ffcf45c10b07
+    secrets:
+      CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+
