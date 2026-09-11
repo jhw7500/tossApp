@@ -1,6 +1,7 @@
 import { User } from '@apps-in-toss/web-framework'
 
 import { createApiClient, PendingReadingRequestCoordinator } from './client.ts'
+import { buildPagePath } from '../features/pagination.ts'
 import type {
   AcceptedReading,
   CreatePersonBody,
@@ -54,11 +55,11 @@ export const createBrowserService = () => {
     listRelationships: () => transport.get<RelationshipTypeList>('/v1/relationship-types'),
     listQuestions: (relationshipCode: string) => transport.get<QuestionCatalog>(`/v1/questions?relationshipCode=${encodeURIComponent(relationshipCode)}`),
     listCards: () => transport.get<TarotCardCatalog>('/v1/cards'),
-    listPersons: () => transport.get<PersonList>('/v1/persons?limit=100'),
+    listPersons: (cursor?: string | null) => transport.get<PersonList>(buildPagePath('/v1/persons', cursor)),
     getPerson: (personId: string) => transport.get<Person>(`/v1/persons/${encodeURIComponent(personId)}`),
     createPerson: (body: CreatePersonBody) => transport.post<Person>('/v1/persons', body),
     updatePerson: (personId: string, body: PatchPersonBody) => transport.patch<Person>(`/v1/persons/${encodeURIComponent(personId)}`, body),
-    listReadings: (personId: string) => transport.get<ReadingHistory>(`/v1/persons/${encodeURIComponent(personId)}/readings?limit=100`),
+    listReadings: (personId: string, cursor?: string | null) => transport.get<ReadingHistory>(buildPagePath(`/v1/persons/${encodeURIComponent(personId)}/readings`, cursor)),
     getReading: (readingId: string) => transport.get<ReadingDetail>(`/v1/readings/${encodeURIComponent(readingId)}`),
     createReading: (body: CreateReadingBody) => pending.create<AcceptedReading>(body),
     retryReading: (readingId: string, personId: string, body: RetryReadingBody) => pending.retry<AcceptedReading>(readingId, body, personId),
