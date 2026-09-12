@@ -14,7 +14,7 @@
     "lint": "eslint .",
     "test": "npm run test:unit && npm run test:e2e",
     "test:unit": "node --experimental-strip-types --test src/api/client.test.ts src/features/native-back.test.ts src/features/pagination.test.ts src/features/person-conflict.test.ts dev/lan-crypto.test.mjs",
-    "test:e2e": "playwright test",
+    "test:e2e": "VITE_API_BASE_URL=http://127.0.0.1:43999/poison playwright test",
     "format": "prettier --write .",
     "deploy": "ait deploy"
   },

@@ -9,6 +9,7 @@ export function useKeyboardViewport(): void {
     let frame: number | undefined
     const viewport = window.visualViewport
     let restingHeight = viewport?.height ?? window.innerHeight
+    let restingWidth = window.innerWidth
     const root = document.documentElement
 
     const revealActiveField = (active: HTMLElement, currentHeight: number, offsetTop: number) => {
@@ -30,14 +31,18 @@ export function useKeyboardViewport(): void {
         const active = document.activeElement
         const currentHeight = viewport?.height ?? window.innerHeight
         const offsetTop = viewport?.offsetTop ?? 0
+        if (window.innerWidth !== restingWidth) {
+          restingHeight = currentHeight
+          restingWidth = window.innerWidth
+        }
         const obscuredBottom = Math.max(0, window.innerHeight - currentHeight - offsetTop)
-        const keyboardOpen = isTextEntry(active) && restingHeight - currentHeight >= 120
+        const keyboardOpen = restingHeight - currentHeight >= 120
         root.style.setProperty('--visual-viewport-height', `${currentHeight}px`)
         root.style.setProperty('--visual-viewport-offset-top', `${offsetTop}px`)
         root.style.setProperty('--keyboard-inset-bottom', `${obscuredBottom}px`)
         root.toggleAttribute('data-keyboard-open', keyboardOpen)
         if (isTextEntry(active)) revealActiveField(active, currentHeight, offsetTop)
-        else restingHeight = currentHeight
+        if (currentHeight > restingHeight) restingHeight = currentHeight
       })
     }
     window.addEventListener('resize', syncViewport)

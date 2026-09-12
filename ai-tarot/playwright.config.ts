@@ -17,6 +17,9 @@ export default defineConfig({
     command: 'npm run dev -- --host 127.0.0.1 --port 4173',
     port: 4173,
     reuseExistingServer: false,
-    env: { VITE_LOCAL_MOCK_AUTH: 'true' },
+    env: {
+      VITE_API_BASE_URL: '/api',
+      VITE_LOCAL_MOCK_AUTH: 'true',
+    },
   },
 })

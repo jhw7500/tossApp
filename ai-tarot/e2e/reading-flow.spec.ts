@@ -1,5 +1,6 @@
 import { expect, test, type Page, type Route } from '@playwright/test'
 import AxeBuilder from '@axe-core/playwright'
+import { createServer } from 'node:http'
 
 const personId = '00000000-0000-4000-8000-000000000101'
 const readingId = '00000000-0000-4000-8000-000000000201'
@@ -15,6 +16,8 @@ const longQuestion = '지금 이 관계에서 서로의 마음과 앞으로의 �
 const resultSummary = '천천히 이어지는 대화가 관계의 방향을 보여줘요'
 const longToken = 'https://example.test/' + 'unbroken-segment-'.repeat(24)
 const resultParagraphs = `첫 번째 원문 문단은 현재의 망설임을 충분히 설명해요. ${longToken}\n\n두 번째 원문 문단은 서두르지 않고 대화의 흐름을 살피라고 안내해요.`
+const appOrigin = 'http://127.0.0.1:4173'
+const poisonedApiBaseUrl = 'http://127.0.0.1:43999/poison'
 
 const json = (route: Route, body: unknown, status = 200) => route.fulfill({
   status,
@@ -22,7 +25,22 @@ const json = (route: Route, body: unknown, status = 200) => route.fulfill({
   body: JSON.stringify(body),
 })
 
+async function installNetworkIsolation(page: Page) {
+  const blockedRequests: string[] = []
+  await page.route('**/*', async route => {
+    const url = new URL(route.request().url())
+    const isApiPath = url.pathname === '/api' || url.pathname.startsWith('/api/')
+    const isAppResource = url.origin === appOrigin && !isApiPath
+    const isMockedApi = url.origin === appOrigin && url.pathname.startsWith('/api/v1/')
+    if (isAppResource || isMockedApi) return route.fallback()
+    blockedRequests.push(url.href)
+    return route.abort('blockedbyclient')
+  })
+  return blockedRequests
+}
+
 async function installApi(page: Page, seeded = false) {
+  const blockedRequests = await installNetworkIsolation(page)
   let personCreated = seeded
   let readingCreated = seeded
   const submitted: { person: Record<string, unknown> | null; reading: Record<string, unknown> | null } = { person: null, reading: null }
@@ -112,17 +130,18 @@ async function installApi(page: Page, seeded = false) {
     return json(route, { error: { code: 'NOT_FOUND', message: `${method} ${path}`, retryable: false } }, 404)
   })
 
-  return submitted
+  return { submitted, blockedRequests }
 }
 
 async function setVisualViewport(page: Page, height: number, offsetTop = 0, eventType: 'resize' | 'scroll' = 'resize') {
-  await page.evaluate(({ nextHeight, nextOffsetTop, nextEventType }) => {
+  await page.evaluate(async ({ nextHeight, nextOffsetTop, nextEventType }) => {
     if (!window.visualViewport) throw new Error('visualViewport is required for this test')
     Object.defineProperties(window.visualViewport, {
       height: { configurable: true, value: nextHeight },
       offsetTop: { configurable: true, value: nextOffsetTop },
     })
     window.visualViewport.dispatchEvent(new Event(nextEventType))
+    await new Promise(requestAnimationFrame)
   }, { nextHeight: height, nextOffsetTop: offsetTop, nextEventType: eventType })
 }
 
@@ -150,9 +169,43 @@ async function expectAccessibleSurface(page: Page) {
   }).map(element => element.textContent?.trim()))).toEqual([])
 }
 
+test('E2E server ignores a poisoned API base and blocks every unmatched transport', async ({ page }) => {
+  expect(process.env.VITE_API_BASE_URL).toBe(poisonedApiBaseUrl)
+  const sinkRequests: string[] = []
+  const sink = createServer((request, response) => {
+    sinkRequests.push(request.url ?? '')
+    response.writeHead(503).end()
+  })
+  await new Promise<void>((resolve, reject) => {
+    sink.once('error', reject)
+    sink.listen(43999, '127.0.0.1', resolve)
+  })
+
+  try {
+    const { blockedRequests } = await installApi(page)
+    await page.goto('/')
+    await expect(page.getByRole('button', { name: '새 인연 등록' })).toBeVisible()
+
+    const outcomes = await page.evaluate(async ({ poison }) => Promise.allSettled([
+      fetch('/api'),
+      fetch('/api/unhandled'),
+      fetch(`${poison}/remote`),
+    ]).then(results => results.map(result => result.status)), { poison: poisonedApiBaseUrl })
+
+    expect(outcomes).toEqual(['rejected', 'rejected', 'rejected'])
+    expect(blockedRequests).toContain(`${appOrigin}/api`)
+    expect(blockedRequests).toContain(`${appOrigin}/api/unhandled`)
+    expect(blockedRequests).toContain(`${poisonedApiBaseUrl}/remote`)
+    expect(blockedRequests).not.toContain(`${poisonedApiBaseUrl}/v1/sessions/toss-anonymous`)
+    expect(sinkRequests).toEqual([])
+  } finally {
+    await new Promise<void>((resolve, reject) => sink.close(error => error ? reject(error) : resolve()))
+  }
+})
+
 test('320px keyboard flow keeps actions visible and preserves accessible long-form reading output', async ({ page }, testInfo) => {
   await page.setViewportSize({ width: 320, height: 700 })
-  const submitted = await installApi(page)
+  const { submitted } = await installApi(page)
   await page.goto('/')
 
   await page.getByRole('button', { name: '새 인연 등록' }).click()
@@ -167,9 +220,14 @@ test('320px keyboard flow keeps actions visible and preserves accessible long-fo
   await expect(situation).toHaveAttribute('aria-describedby', 'person-situation-count')
   await situation.fill(longSituation)
   await situation.focus()
-  await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight))
-  await setVisualViewport(page, 430, 20)
   const submit = page.getByRole('button', { name: '인연 등록' })
+  await page.setViewportSize({ width: 700, height: 320 })
+  await expect(submit.locator('..')).toHaveCSS('position', 'static')
+  await page.setViewportSize({ width: 320, height: 700 })
+  await expect(submit.locator('..')).toHaveCSS('position', 'static')
+  await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight))
+  for (const height of [650, 580, 510]) await setVisualViewport(page, height)
+  await setVisualViewport(page, 430, 20)
   await expect(submit.locator('..')).toHaveCSS('position', 'fixed')
   const situationField = situation.locator('xpath=ancestor::label[contains(@class,"field")]')
   await expect.poll(async () => {
@@ -194,11 +252,15 @@ test('320px keyboard flow keeps actions visible and preserves accessible long-fo
     const [fieldBox, actionBox] = await Promise.all([situationField.boundingBox(), submit.boundingBox()])
     return fieldBox && actionBox ? actionBox.y - (fieldBox.y + fieldBox.height) : -1
   }).toBeGreaterThanOrEqual(0)
+  await situation.blur()
+  await expect(submit.locator('..')).toHaveCSS('position', 'fixed')
+  await situation.focus()
+  await expect(submit.locator('..')).toHaveCSS('position', 'fixed')
   if (process.env.CAPTURE_SCREENSHOTS) await page.screenshot({ path: testInfo.outputPath('person-form-keyboard-320.png') })
-  await setVisualViewport(page, 700)
   await submit.click()
 
   await expect.poll(() => submitted.person).toEqual({ nickname: longNickname, relationshipCode: 'dating', currentSituation: longSituation.trim() })
+  await setVisualViewport(page, 700)
   await expectHeadingAtTop(page, longNickname)
   await page.getByRole('button', { name: '새 리딩' }).click()
   await expectHeadingAtTop(page, '무엇을 물어볼까요?')
