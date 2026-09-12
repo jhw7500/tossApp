@@ -22,8 +22,8 @@ if (role === 'worker') {
   await import('/app/server/src/main.ts');
 } else {
   if (process.env.APP_ENV !== 'test') throw new Error('Database commands require APP_ENV=test');
-  const { createPool } = await import('/app/server/src/db/pool.ts');
-  const pool = createPool(process.env.DATABASE_URL);
+  const { createPool, createMigrationPool } = await import('/app/server/src/db/pool.ts');
+  const pool = role === 'migrate' ? createMigrationPool(process.env.DATABASE_URL) : createPool(process.env.DATABASE_URL);
   try {
     if (role === 'migrate') {
       const { migrate } = await import('/app/server/src/db/migrate.ts');

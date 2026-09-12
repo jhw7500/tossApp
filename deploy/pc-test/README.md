@@ -11,6 +11,13 @@ Toss QR -> HTTPS/Funnel -> 127.0.0.1:3200 -> API -> PostgreSQL
 
 ## 준비와 실행
 
+`migrate` 역할만 DB 연결/획득에 5초 제한을 적용한다. API·worker·seed 설정은
+바꾸지 않는다. SQL·advisory lock·트랜잭션·전체 명령의 시간 제한은 아니며,
+실제 PostgreSQL 검증과 운영 적용은 별도 단계다. 롤백도 실패하면 최초 오류와
+롤백 오류를 함께 보존하고 해당 연결을 폐기한다. 명령 실패만으로 DB 롤백을
+단정하거나 자동 재시도하지 않는다. 아래 `init-db`는 DB도 시작하므로 기존
+환경에서 마이그레이션만 실행하는 명령으로 사용하지 않는다.
+
 ```sh
 rtk proxy python3 deploy/pc-test/manage.py prepare
 rtk proxy python3 deploy/pc-test/manage.py build

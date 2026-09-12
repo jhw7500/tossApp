@@ -10,6 +10,7 @@ const migrationNames = ['001_foundation.sql', '002_interpretation_candidates.sql
 export async function migrate(pool: Pool): Promise<void> {
   const migrations = await Promise.all(migrationNames.map(async (name) => ({ name, sql: await readFile(resolve(import.meta.dirname, '../../migrations', name), 'utf8') })));
   const client = await pool.connect();
+  let destroyClient = false;
   try {
     await client.query('BEGIN');
     await client.query("SELECT pg_advisory_xact_lock(hashtext('tarororo_foundation_migrations'))");
@@ -30,14 +31,22 @@ export async function migrate(pool: Pool): Promise<void> {
     }
     await client.query('COMMIT');
   } catch (error) {
-    await client.query('ROLLBACK');
+    try {
+      await client.query('ROLLBACK');
+    } catch (rollbackError) {
+      destroyClient = true;
+      throw new AggregateError([error, rollbackError], 'migration and rollback both failed', { cause: error });
+    }
     throw error;
-  } finally { client.release(); }
+  } finally {
+    if (destroyClient) client.release(true);
+    else client.release();
+  }
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   const { readConfig } = await import('../config.ts');
-  const { createPool } = await import('./pool.ts');
-  const pool = createPool(readConfig().databaseUrl);
+  const { createMigrationPool } = await import('./pool.ts');
+  const pool = createMigrationPool(readConfig().databaseUrl);
   try { await migrate(pool); } finally { await pool.end(); }
 }
