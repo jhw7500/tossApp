@@ -4,11 +4,11 @@ import test from 'node:test';
 import { CsvSyntaxError, parseCsv } from './csv.mjs';
 
 test('BOM, CRLF, commas, escaped quotes, and quoted newlines are preserved', () => {
-  const rows = parseCsv('\ufeffa,b\r\n1,"한글, ""인용""\n둘째 줄"\r\n');
+  const rows = parseCsv('\ufeffa,b\r\n1,"한글, ""인용""\r\n둘째 줄"\r\n');
 
   assert.deepEqual(rows, [
     { line: 1, fields: ['a', 'b'] },
-    { line: 2, fields: ['1', '한글, "인용"\n둘째 줄'] },
+    { line: 2, fields: ['1', '한글, "인용"\r\n둘째 줄'] },
   ]);
 });
 

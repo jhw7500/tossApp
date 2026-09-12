@@ -55,7 +55,7 @@ export function parseCsv(source) {
           column += 1;
         }
       } else if (isNewline) {
-        field += '\n';
+        field += character === '\r' && source[offset + 1] === '\n' ? '\r\n' : character;
         consumeNewline();
       } else {
         field += character;

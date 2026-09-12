@@ -15,7 +15,7 @@
 - 변경 경로는 `content/`, `scripts/content/`, `docs/content/`로 제한한다.
 - 실제 타로 의미를 생성하지 않으며 예제는 모두 `synthetic_test`로 표시한다.
 - DB, migration, seed, server runtime, AI prompt를 변경하거나 실행하지 않는다.
-- 입력은 선택적인 UTF-8 BOM, 쉼표, 인용부호, CRLF/LF, 인용 필드 안 줄바꿈을 지원하는 UTF-8 CSV다.
+- 입력은 선택적인 UTF-8 BOM, 쉼표, 인용부호, CRLF/LF, 인용 필드 안 줄바꿈을 지원하고 내부 줄바꿈 시퀀스를 보존하는 UTF-8 CSV다.
 - 활성 원문 후보는 카드·locale당 최대 20개, 콘텐츠 후보 바이트 상한은 64 KiB다.
 - 바이트 검사는 `Buffer.byteLength(JSON.stringify(value), 'utf8')`을 사용하고 원문을 자르지 않는다.
 - CLI는 입력 또는 별도 산출물을 쓰지 않는 dry-run이다.
@@ -89,7 +89,7 @@ export class CsvSyntaxError extends Error {
 export function parseCsv(source) {
   // Optional BOM is skipped only at offset 0.
   // States: at field start, in unquoted field, in quoted field, after closing quote.
-  // A comma closes a field; CRLF or LF closes a record outside quoted fields.
+  // A comma closes a field; CRLF or LF closes a record outside quoted fields and is preserved inside them.
   // Two quotes inside a quoted field decode to one quote.
   // Record.line is the physical line on which its first field starts.
   // A final line ending does not create a spurious empty record.
