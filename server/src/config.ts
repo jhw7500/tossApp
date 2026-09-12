@@ -1,4 +1,5 @@
 import { BlockList, isIP } from 'node:net';
+import { readAiConfig, type AiConfig } from './ai/config.ts';
 
 export interface VersionedSubjectSecret {
   version: string;

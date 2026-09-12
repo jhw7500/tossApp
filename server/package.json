@@ -12,7 +12,7 @@
     "worker:dev": "node --env-file-if-exists=.env --watch --experimental-strip-types src/worker/main.ts",
     "quality:evaluate": "node --experimental-strip-types src/ai/evaluate-quality.ts",
     "typecheck": "tsc --noEmit",
-    "test": "node --env-file-if-exists=.env --experimental-strip-types --test tests/config.test.ts tests/auth.test.ts tests/reading-ai.test.ts tests/quality-evaluation.test.ts tests/api-log.test.ts tests/worker-log.test.ts",
+    "test": "node --env-file-if-exists=.env --experimental-strip-types --test tests/config.test.ts tests/auth.test.ts tests/reading-ai.test.ts tests/quality-evaluation.test.ts tests/api-log.test.ts tests/worker-log.test.ts tests/stdout-writer.test.ts",
     "test:integration": "node --env-file-if-exists=.env --experimental-strip-types --test tests/api.test.ts tests/api-observability.test.ts tests/database.test.ts tests/readings.test.ts tests/reading-attempts.test.ts tests/reading-worker.test.ts tests/subject-identity.test.ts",
     "db:migrate": "node --env-file-if-exists=.env --experimental-strip-types src/db/migrate.ts",
     "db:seed": "node --env-file-if-exists=.env --experimental-strip-types src/db/seed.ts"
