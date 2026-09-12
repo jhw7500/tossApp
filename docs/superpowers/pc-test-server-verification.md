@@ -79,7 +79,7 @@ Post-phone database check     2 readings / 2 SUCCEEDED
 /home/jhw/.config/tarororo-test/toss-client.key
 ```
 
-폰 동작 확인까지 완료했으므로 이 구현 계획의 테스트 환경 구축 항목은 모두 완료다. 사용자 계속 진행 지시에 따라 서버 구성 변경의 커밋·PR·리뷰를 진행한다. 서비스 전체는 최종 콘텐츠·디자인 및 출시 준비가 남아 있다. 실기기 테스트 완료 확인을 번들 검수 요청 지시로 간주하지 않는다. 기존 Funnel 설정은 덮어쓰거나 `manage.py publish`로 반복 공개하지 않는다. 아래 링크는 같은 번들 재확인에 사용할 수 있다.
+폰 동작 확인까지 완료했으므로 이 구현 계획의 테스트 환경 구축 항목은 모두 완료다. 서버 구성 변경은 [PR #3](https://github.com/jhw7500/tossApp/pull/3)으로 리뷰 후 main `b53b60b`에 병합했고, 공통 자동 검증은 [PR #4](https://github.com/jhw7500/tossApp/pull/4)로 main `808841c`에 추가했다. 서비스 전체는 최종 콘텐츠·디자인 및 출시 준비가 남아 있다. 실기기 테스트 완료 확인을 번들 검수 요청 지시로 간주하지 않는다. 기존 Funnel 설정은 덮어쓰거나 `manage.py publish`로 반복 공개하지 않는다. 아래 링크는 같은 번들 재확인에 사용할 수 있다.
 
 - 폰 테스트 링크: `intoss-private://tarororo?_deploymentId=01a09330-7521-7d40-a99f-b764cf50c4b1&host=appsInTossHost`
 - PC 테스트 QR: `https://apps-in-toss.toss.im/workspace/93125/mini-app/75257/app-build?testDeploymentId=01a09330-7521-7d40-a99f-b764cf50c4b1&testVersionName=20260912-2`
