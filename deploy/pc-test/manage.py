@@ -127,6 +127,8 @@ class Deployment:
         self.config = Path(os.environ.get("TARORORO_TEST_CONFIG", Path.home() / ".config/tarororo-test")).absolute()
         self.state = Path(os.environ.get("TARORORO_TEST_STATE", Path.home() / ".local/share/tarororo-test")).absolute()
         for path in (self.config, self.state):
+            if ".." in path.parts:
+                raise ValueError("Parent path segments are not allowed for deployment config/state")
             repository = ROOT.parents[1] if ROOT.parent.name == ".worktrees" else ROOT
             if path.is_relative_to(repository) or path == Path.home():
                 raise ValueError("Deployment config/state must be dedicated directories outside the repository")
@@ -255,6 +257,8 @@ class Deployment:
         environment = dict(item.split("=", 1) for item in container["Config"]["Env"] if "=" in item)
         if environment.get("AUTH_MODE") != "toss" or environment.get("APP_ENV") != "test":
             raise ValueError("Running container authentication does not match the approved deployment")
+        if environment.get("ALLOWED_ORIGINS") != ORIGIN:
+            raise ValueError("Running container Origin does not match the approved QR Origin")
         bindings = container["NetworkSettings"]["Ports"].get("3000/tcp")
         if bindings != [{"HostIp": "127.0.0.1", "HostPort": "3200"}]:
             raise ValueError("Running container does not own the expected local port")

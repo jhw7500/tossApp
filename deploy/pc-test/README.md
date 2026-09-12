@@ -30,6 +30,8 @@ rtk proxy python3 deploy/pc-test/manage.py seed
 
 설정 디렉터리는 현재 사용자 소유 0700, 각 파일은 0600이어야 한다. 암호화된 개인키는 지원하지 않는다. 발급한 인증서·키를 위 경로에 저장한 뒤 다음 명령으로 권한을 맞춘다.
 
+경로를 재정의할 때는 저장소 밖의 전용 디렉터리를 사용한다. 상위 디렉터리를 가리키는 `..` 경로는 파일 생성 전에 거절하며, 비밀 파일과 상위 경로의 심볼릭 링크도 허용하지 않는다.
+
 ```sh
 rtk proxy chmod 600 /home/jhw/.config/tarororo-test/toss-client.crt /home/jhw/.config/tarororo-test/toss-client.key
 rtk proxy python3 deploy/pc-test/manage.py check
@@ -71,6 +73,8 @@ rtk proxy python3 deploy/pc-test/manage.py publish
 ```
 
 이 명령은 인증 조건과 실행 중인 API를 확인한 뒤 `tailscale funnel --bg --https=443 http://127.0.0.1:3200`을 실행한다. Tailscale HTTPS/Funnel 관리자 승인이 필요하면 CLI에 표시된 웹 링크에서 진행한다. 기존 Serve/Funnel 구성이 있으면 변경하지 않고 중단하므로 먼저 설정을 확인한다. 45초 내 명령이 완료되지 않아도 Tailscale 설정이 변경되었을 수 있으므로 재시도 전에 `rtk proxy tailscale funnel status`를 확인한다.
+
+실행 중인 API의 `ALLOWED_ORIGINS`도 실제 컨테이너에서 검사한다. 현재 Compose 파일을 수정했더라도 실행 중인 컨테이너의 Origin이 승인된 QR Origin과 다르면 공개를 거절한다.
 
 웹 활성화 뒤 `Access denied: serve config denied`가 나오면 로컬 사용자에게 Tailscale 설정 권한이 없는 것이다. API 검사가 통과했고 기존 공개 설정이 비어 있음을 확인한 상태에서 서버 터미널의 사용자가 `rtk proxy sudo tailscale funnel --bg --https=443 http://127.0.0.1:3200`을 실행한다. 비밀번호는 서버의 sudo 프롬프트에만 입력한다. 성공 후에는 기존 구성과 실제 HTTPS 응답을 확인하며 `publish`를 다시 실행해 설정을 덮어쓰려 하지 않는다.
 

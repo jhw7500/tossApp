@@ -1,8 +1,12 @@
 import copy
+import io
+import json
+import os
 from pathlib import Path
 import subprocess
 import tempfile
 import unittest
+from unittest.mock import patch
 
 import manage
 
@@ -17,6 +21,66 @@ class DeploymentBoundaries(unittest.TestCase):
         operation = getattr(manage, name, None)
         self.assertTrue(callable(operation), f"{name} must be implemented")
         return operation
+
+    def test_parent_path_overrides_are_rejected_before_creating_private_files(self):
+        for variable in ["TARORORO_TEST_CONFIG", "TARORORO_TEST_STATE"]:
+            for target in ["repository", "home"]:
+                with self.subTest(variable=variable, target=target), tempfile.TemporaryDirectory(dir=self.root) as name:
+                    root = Path(name)
+                    repository, outside, home = root / "repo", root / "outside", root / "home"
+                    for directory in [repository, outside, home]:
+                        directory.mkdir(mode=0o700)
+                    destination = repository / "private" if target == "repository" else home
+                    env = {"TARORORO_TEST_CONFIG": str(outside / "config"),
+                           "TARORORO_TEST_STATE": str(outside / "state"),
+                           variable: str(outside / ".." / destination.relative_to(root))}
+                    with patch.object(manage, "ROOT", repository), patch.object(Path, "home", return_value=home), \
+                            patch.dict(os.environ, env, clear=True), patch("sys.stdout", new_callable=io.StringIO):
+                        with self.assertRaises(ValueError):
+                            manage.Deployment().prepare()
+                    self.assertFalse((repository / "private").exists())
+                    self.assertFalse((home / "db-password").exists())
+                    self.assertEqual(list(outside.iterdir()), [])
+
+    def test_external_paths_can_prepare_private_files(self):
+        repository = self.root / "repo"
+        repository.mkdir()
+        config, state = self.root / "config", self.root / "state"
+        env = {"TARORORO_TEST_CONFIG": str(config), "TARORORO_TEST_STATE": str(state)}
+        with patch.object(manage, "ROOT", repository), patch.dict(os.environ, env, clear=True), \
+                patch("sys.stdout", new_callable=io.StringIO):
+            manage.Deployment().prepare()
+        for path in [config, state, state / "backups"]:
+            manage.check_private(path, directory=True)
+        for name in ["db-password", "subject-secret"]:
+            manage.check_private(config / name)
+        self.assertEqual(list(repository.iterdir()), [])
+
+    def test_publish_rejects_runtime_origin_drift_before_contacting_funnel(self):
+        for origin in [manage.ORIGIN, "https://untrusted.example", "*", None]:
+            with self.subTest(origin=origin):
+                environment = ["APP_ENV=test", "AUTH_MODE=toss"]
+                if origin is not None:
+                    environment.append("ALLOWED_ORIGINS=" + origin)
+                container = {"Config": {"Env": environment}, "NetworkSettings": {"Ports": {
+                    "3000/tcp": [{"HostIp": "127.0.0.1", "HostPort": "3200"}]}}}
+                results = [subprocess.CompletedProcess([], 0, stdout=json.dumps([container]).encode()),
+                           subprocess.CompletedProcess([], 0, stdout=b"{}"),
+                           subprocess.CompletedProcess([], 0)]
+                deployment = manage.Deployment()
+                with patch.object(deployment, "check"), patch.object(deployment, "compose", return_value=
+                        subprocess.CompletedProcess([], 0, stdout=b"fixture-api")), \
+                        patch.object(manage.subprocess, "run", side_effect=results) as run, \
+                        patch.object(manage, "urlopen", return_value=io.BytesIO(b'{"status":"ready"}')) as ready:
+                    if origin == manage.ORIGIN:
+                        deployment.publish()
+                        self.assertEqual(run.call_args_list[-1].args[0],
+                                         ["tailscale", "funnel", "--bg", "--https=443", "http://127.0.0.1:3200"])
+                    else:
+                        with self.assertRaisesRegex(ValueError, "Origin"):
+                            deployment.publish()
+                        self.assertEqual(run.call_count, 1)
+                        ready.assert_not_called()
 
     def test_secrets_are_private_and_preparation_preserves_identity(self):
         write = self.operation("write_secret")
