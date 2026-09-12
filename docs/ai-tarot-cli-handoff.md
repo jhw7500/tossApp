@@ -1,5 +1,142 @@
 # 프로젝트 인계: 앱인토스 AI 타로 서비스
 
+> 최신 상태: 2026-09-12 KST. 아래 `0. 백엔드 구현 인계`가 현재 작업 상태다.
+> 뒤의 1~7절은 프로젝트 시작 당시의 역사적 브리프이며, 현재 구현 범위나 중단 조건보다 우선하지 않는다.
+
+## 0. 백엔드 구현 인계
+
+### 인계 판정
+
+`HANDOFF_READY`. 진행 중인 구현이나 테스트는 없고, 이 세션이 시작한 서버·컨테이너도 모두 종료했다. 현재 변경은 검증 완료된 미커밋 상태다. 새 기능을 시작하기 전에 OMX 관리 세션에서 변경 보존 방식, 커밋 구성, 최신 `origin/main` 통합 순서를 결정해야 한다.
+
+### Git 상태
+
+| 항목 | 현재 값 |
+| --- | --- |
+| 저장소 | `jhw7500/tossApp` |
+| worktree | `/home/jhw/ai/opencode/projects/tossApp/.worktrees/session-backend-ai` |
+| 브랜치 | `feat/backend-ai-next` |
+| HEAD | `28bde738826d1758eb3422281ea396af777a9423` (`feat: paginate person and reading lists (#2)`) |
+| upstream | 없음 |
+| 원격 브랜치 | `origin/feat/backend-ai-next` 없음 |
+| 현재 브랜치 PR | 없음 |
+| 기준 브랜치 | `origin/main` = `18348b3` |
+| 기준과의 차이 | 로컬 고유 커밋 0개, `origin/main` 쪽 6개; merge-base는 현재 HEAD |
+| worktree 상태 | dirty, 모든 신규 구현이 미커밋 |
+
+현재 세션에서 커밋·푸시·PR 생성은 하지 않았다. 현재 HEAD까지 포함된 기존 PR은 다음과 같다.
+
+- PR #1 `feat: implement AI tarot reading foundation`: MERGED, `2026-09-11T14:10:38Z`
+- PR #2 `feat: paginate person and reading lists`: MERGED, `2026-09-11T14:48:11Z`
+
+### 완료한 백엔드 작업
+
+1. 근거 기반 AI 리딩 품질 평가
+   - 전체 후보 출처와 선택 근거를 보존하는 사람 검토 패킷을 구현했다.
+   - 의미 보존, 근거 선택, 질문 맥락, 전체 흐름, 비단정적 언어의 다섯 기준을 검증한다.
+   - 합성 출처가 하나라도 있으면 결과를 항상 `MECHANICS_ONLY`로 제한한다.
+   - 실제 타로 리더 원문은 제공되지 않아 reader-content `PASS`는 주장하지 않는다.
+
+2. Worker 수명주기 관측
+   - `reading_attempt_started`와 `reading_attempt_finished` JSON Lines 이벤트를 추가했다.
+   - 내부 Reading/attempt ID, provider/model, 상태, 소요 시간, 안전한 token usage 또는 정규화한 오류 코드만 기록한다.
+   - 늦은 완료·실패는 `STALE`로 기록하며 동기·비동기 observer 실패가 작업 결과에 영향을 주지 않는다.
+
+3. API 관측
+   - 완료된 응답마다 `api_request_finished` 이벤트 하나를 기록한다.
+   - request ID, 상태 코드, 소요 시간, 정규화한 오류 코드만 허용한다.
+   - URL, IP, header, body, 세션/사용자/질문/출처/결과 정보가 Fastify 내부 로그로 새지 않도록 Fastify logger를 비활성화했다.
+   - graceful shutdown 중 이미 수락된 요청도 정상 수명주기 이벤트를 남긴다.
+
+4. 익명 사용자 HMAC 비밀키 교체
+   - `004_subject_identity_rotation.sql`에 identity alias 테이블, 기존 사용자 백필, 구 코드 사용자 삽입 포착 trigger를 추가했다.
+   - 활성 키와 이전 키 후보를 모두 조회·등록하고, 정렬된 PostgreSQL advisory lock으로 혼합 버전 동시 요청을 같은 사용자로 수렴시킨다.
+   - 키 교체 뒤에도 기존 세션, Person, Reading 소유권이 같은 내부 사용자 ID에 남는다.
+   - 이미 서로 다른 사용자로 갈라진 identity가 감지되면 임의 병합하지 않고 세션 생성을 롤백한다.
+   - `AUTH_SUBJECT_SECRET_VERSION`과 `AUTH_SUBJECT_PREVIOUS_SECRETS`를 검증하고 안전한 배포·보존 절차를 `server/README.md`와 `.env.example`에 기록했다.
+
+진행 중인 코드 작업은 없다. 위 네 작업은 각각 독립 리뷰를 거쳤고, 마지막 HMAC 재검토 결과는 Critical/Important/Minor 없음, `APPROVE`였다. API/Worker/품질 평가에서 발견된 이전 리뷰 지적도 수정 후 검증했다.
+
+### 최종 검증 결과
+
+| 검증 | 결과 |
+| --- | --- |
+| `npm test` | 45/45 통과 |
+| PostgreSQL `npm run test:integration` | 53/53 통과 |
+| `npm run typecheck` | 통과 |
+| `npm run quality:evaluate -- fixtures/quality/synthetic-mechanics.json` | `MECHANICS_ONLY`, failed criteria 없음 |
+| `git diff --check` | 통과 |
+| HMAC 혼합 버전 스트레스 검토 | 50 keys -> 50 users / 100 aliases, 사용자 분리 없음 |
+
+통합 테스트는 격리 schema와 임시 `postgres:16-alpine` 컨테이너를 사용했으며 외부 AI API를 호출하지 않았다.
+
+### 미커밋 변경
+
+Tracked 수정 17개(인계 문서 포함):
+
+```text
+M  docs/ai-tarot-cli-handoff.md
+M  server/.env.example
+M  server/README.md
+M  server/package.json
+M  server/src/app.ts
+M  server/src/auth/sessions.ts
+M  server/src/config.ts
+M  server/src/db/migrate.ts
+M  server/src/errors.ts
+M  server/src/main.ts
+M  server/src/readings/attempts.ts
+M  server/src/worker/main.ts
+M  server/src/worker/run.ts
+M  server/tests/config.test.ts
+M  server/tests/database.test.ts
+M  server/tests/helpers.ts
+M  server/tests/reading-worker.test.ts
+```
+
+Untracked 신규 파일 11개:
+
+```text
+server/fixtures/quality/synthetic-mechanics.json
+server/migrations/004_subject_identity_rotation.sql
+server/src/ai/evaluate-quality.ts
+server/src/ai/quality-evaluation.ts
+server/src/http/api-observability.ts
+server/src/worker/log.ts
+server/tests/api-log.test.ts
+server/tests/api-observability.test.ts
+server/tests/quality-evaluation.test.ts
+server/tests/subject-identity.test.ts
+server/tests/worker-log.test.ts
+```
+
+이 인계 문서 수정도 아직 커밋되지 않았다. `server/README.md`, `server/package.json`은 여러 완료 작업이 함께 수정한 공유 파일이므로 변경을 나눠 커밋할 때 hunk 단위 검토가 필요하다.
+
+### 남은 문제와 다음 작업
+
+- 알려진 Critical/Important 코드 결함은 없다.
+- 현재 브랜치는 `origin/main`보다 6커밋 뒤이고 worktree가 dirty다. 미커밋 변경을 보존하지 않은 채 reset, checkout, rebase, worktree 삭제를 실행하면 안 된다.
+- OMX 관리 세션의 첫 작업은 전체 diff와 이 문서를 확인한 뒤 커밋을 한 개로 묶을지 작업별로 나눌지 결정하는 것이다. 변경을 안전하게 보존한 후 `origin/main` 위로 통합하고 충돌을 해결한다.
+- 기준 브랜치 통합 뒤 단위 테스트, 전체 PostgreSQL 통합 테스트, typecheck, quality fixture, `git diff --check`를 다시 실행한다.
+- 실제 검수된 타로 리더 출처가 없으므로 reader-content 품질 평가는 여전히 남아 있다. 원문과 검토자를 확보하기 전에는 합성 fixture 결과를 콘텐츠 품질 통과로 바꾸지 않는다.
+- 실제 Toss mTLS 자격 증명, QR 실기기 식별키 동작, 운영 배포는 이 worktree에서 검증하지 않았다.
+- 다음 제품 기능은 선택하지 않았다. 브랜치 정리와 통합 판단 전에는 새 기능을 시작하지 않는다.
+
+### 실행 중 자원
+
+| 자원 | 상태 | 인계 조치 |
+| --- | --- | --- |
+| `session-backend-ai`의 Node/API/worker 프로세스 | 없음 | 조치 없음 |
+| 이 세션의 임시 PostgreSQL 컨테이너 | 모두 제거 및 부재 확인 | 재사용하지 않음 |
+| tmux `tarororo-live:dev` | 실행 중, cwd는 `.worktrees/backend-foundation` | 다른 worktree의 공유 개발 환경이므로 유지 |
+| `tarororo-test-api-1` | 실행 중, healthy, `.worktrees/backend-foundation/deploy/pc-test` 소유 | 유지, 이 인계 작업에서 종료하지 않음 |
+| `tarororo-test-worker-1` | 실행 중, 같은 PC test stack 소유 | 유지, 이 인계 작업에서 종료하지 않음 |
+| `tarororo-test-db-1` | 실행 중, healthy, 같은 PC test stack 소유 | 유지, 이 인계 작업에서 종료하지 않음 |
+| `tossapp-foundation-3a44f8b2` | 실행 중인 `postgres:18-alpine`, 소유 세션 미확인 | 유지, 소유 확인 전 종료 금지 |
+| `frosty_lewin` | 실행 중인 `johyunwoo/imx93`, 이 백엔드 작업과 무관 | 유지, Yocto 관련 작업·중단 금지 |
+
+이 백엔드 세션이 점유한 포트나 후속 정리가 필요한 테스트 schema는 없다.
+
 너는 이 프로젝트의 개발 파트너다. 아래 내용을 기준으로 현재 환경을 확인하고, 도구 구성과 첫 버전의 개발 계획을 제안해라. 아직 승인되지 않은 설계나 도구를 확정된 것으로 취급하지 마라.
 
 ## 1. 확정된 목표와 미정 사항

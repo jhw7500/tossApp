@@ -30,6 +30,52 @@ test('accepts a loopback mock configuration for tests', () => {
   });
   assert.equal(config.authMode, 'mock');
   assert.equal(config.port, 3100);
+  assert.equal(config.subjectSecretVersion, 'v1');
+  assert.deepEqual(config.previousSubjectSecrets, []);
+});
+
+test('accepts versioned previous subject secrets for a rotation window', () => {
+  const config = readConfig({
+    APP_ENV: 'test',
+    HOST: '127.0.0.1',
+    PORT: '3100',
+    DATABASE_URL: 'postgresql://example',
+    AUTH_MODE: 'mock',
+    AUTH_SUBJECT_SECRET: 'b'.repeat(32),
+    AUTH_SUBJECT_SECRET_VERSION: 'v2',
+    AUTH_SUBJECT_PREVIOUS_SECRETS: JSON.stringify({ v1: 'a'.repeat(32) }),
+    ALLOWED_ORIGINS: 'http://localhost:3000',
+  });
+
+  assert.equal(config.subjectSecretVersion, 'v2');
+  assert.deepEqual(config.previousSubjectSecrets, [{ version: 'v1', secret: 'a'.repeat(32) }]);
+});
+
+test('rejects malformed, ambiguous, or weak subject-secret rotation settings', () => {
+  const base = {
+    APP_ENV: 'test',
+    HOST: '127.0.0.1',
+    PORT: '3100',
+    DATABASE_URL: 'postgresql://example',
+    AUTH_MODE: 'mock',
+    AUTH_SUBJECT_SECRET: 'b'.repeat(32),
+    AUTH_SUBJECT_SECRET_VERSION: 'v2',
+    ALLOWED_ORIGINS: 'http://localhost:3000',
+  };
+  const invalid = [
+    { AUTH_SUBJECT_SECRET_VERSION: 'legacy' },
+    { AUTH_SUBJECT_SECRET_VERSION: 'spaces are invalid' },
+    { AUTH_SUBJECT_PREVIOUS_SECRETS: '{bad json' },
+    { AUTH_SUBJECT_PREVIOUS_SECRETS: '[]' },
+    { AUTH_SUBJECT_PREVIOUS_SECRETS: JSON.stringify({ v1: 'short' }) },
+    { AUTH_SUBJECT_PREVIOUS_SECRETS: JSON.stringify({ v2: 'a'.repeat(32) }) },
+    { AUTH_SUBJECT_PREVIOUS_SECRETS: JSON.stringify({ v1: 'b'.repeat(32) }) },
+    { AUTH_SUBJECT_PREVIOUS_SECRETS: JSON.stringify({ legacy: 'a'.repeat(32) }) },
+  ];
+
+  for (const override of invalid) {
+    assert.throws(() => readConfig({ ...base, ...override }), /subject secret|previous subject secrets/i);
+  }
 });
 
 test('rejects every production loopback origin form', () => {
