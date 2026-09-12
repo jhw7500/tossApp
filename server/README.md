@@ -69,6 +69,8 @@ Run the worker as a separate process with `AI_PROVIDER=gemini`, `AI_MODEL` (defa
 
 The worker writes one JSON lifecycle event per stdout line at attempt start and finish. Events contain only internal Reading/attempt IDs, attempt number, provider, model, duration, terminal status, token usage on success, or a safe error code on failure. A late result for an expired claim is reported as `STALE`. Events never contain session or anonymous keys, Person fields, question/source text, generated output, provider error bodies, or credentials. Logging failures are isolated from processing and do not change persistence or retry behavior.
 
+The worker reads only `DATABASE_URL` and AI settings; API identity secrets and Toss mTLS files are not required by the worker. The PC test deployment mounts role-specific secrets at runtime and maintains a separate test database; see [deployment instructions](../deploy/pc-test/README.md).
+
 ```typescript
 import { claimNextReading, completeReading, failReading, expireReadings } from './src/readings/attempts.ts';
 import { toReadingContext } from './src/readings/snapshot.ts';

@@ -1,4 +1,5 @@
 import { BlockList, isIP } from 'node:net';
+import { readAiConfig, type AiConfig } from './ai/config.ts';
 
 export interface VersionedSubjectSecret {
   version: string;
@@ -20,6 +21,12 @@ export interface FoundationConfig {
 }
 
 type Environment = Record<string, string | undefined>;
+
+export function readWorkerConfig(env: Environment = process.env): { databaseUrl: string; ai: AiConfig } {
+  const databaseUrl = env.DATABASE_URL?.trim();
+  if (!databaseUrl) throw new Error('DATABASE_URL is required');
+  return { databaseUrl, ai: readAiConfig(env) };
+}
 
 function required(env: Environment, name: string): string {
   const value = env[name];

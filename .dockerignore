@@ -1,0 +1,15 @@
+**
+!server/
+!server/package.json
+!server/package-lock.json
+!server/src/
+!server/src/**
+!server/migrations/
+!server/migrations/*.sql
+!contracts/
+!contracts/package.json
+!contracts/*.ts
+!deploy/
+!deploy/pc-test/
+!deploy/pc-test/Dockerfile
+!deploy/pc-test/run.mjs

@@ -1,8 +1,14 @@
+import { graniteEvent } from '@apps-in-toss/web-framework'
 import { Button } from '@toss/tds-mobile'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 
 import { ClientConfigurationError, createBrowserService } from './api/service.ts'
 import type { AcceptedReading } from './api/types.ts'
+import {
+  hasAppHistoryPredecessor,
+  subscribeNativeBack,
+  withAppHistoryPredecessor,
+} from './features/native-back.ts'
 import { useSafeArea } from './hooks/use-safe-area.ts'
 import { PersonDetailPage } from './pages/PersonDetailPage.tsx'
 import { PersonFormPage } from './pages/PersonFormPage.tsx'
@@ -44,6 +50,7 @@ const hrefFor = (route: Route): string => {
 function App() {
   useSafeArea()
   const [route, setRoute] = useState<Route>(readRoute)
+  const hasPreviousEntry = hasAppHistoryPredecessor(history.state)
   const [recovery, setRecovery] = useState<'checking' | 'idle' | 'uncertain'>('checking')
   const [recoveryMessage, setRecoveryMessage] = useState('')
   const serviceResult = useMemo(() => {
@@ -52,7 +59,12 @@ function App() {
   }, [])
 
   const navigate = useCallback((next: Route, replace = false) => {
-    history[replace ? 'replaceState' : 'pushState'](null, '', hrefFor(next))
+    const nextHasPreviousEntry = replace ? hasAppHistoryPredecessor(history.state) : true
+    history[replace ? 'replaceState' : 'pushState'](
+      withAppHistoryPredecessor(history.state, nextHasPreviousEntry),
+      '',
+      hrefFor(next),
+    )
     setRoute(next)
   }, [])
 
@@ -61,6 +73,15 @@ function App() {
     addEventListener('popstate', onPopState)
     return () => removeEventListener('popstate', onPopState)
   }, [])
+
+  useEffect(() => subscribeNativeBack({
+    active: route.name !== 'persons',
+    hasPreviousEntry,
+    subscribe: (event, handlers) => graniteEvent.addEventListener(event, handlers),
+    goBack: () => history.back(),
+    goToRoot: () => navigate({ name: 'persons' }, true),
+    onError: error => console.error('앱인토스 뒤로가기 이벤트를 처리하지 못했어요.', error),
+  }), [hasPreviousEntry, navigate, route.name])
 
   const recover = useCallback(async () => {
     if (!serviceResult.service) return

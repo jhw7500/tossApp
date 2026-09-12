@@ -1,6 +1,33 @@
 # Tarororo 개발
 
-현재 구현은 `feat/backend-foundation` worktree에 있습니다. 이 디렉터리의 코드를 수정해야 실행 중인 개발 화면에 반영됩니다.
+2026-09-12 기준 인연 등록·수정, 질문과 카드 3장 선택, AI 리딩 생성·재시도·기록 조회가 구현됐습니다. PC 테스트 서버의 HTTPS·토스 인증 연결과 백업/복원을 검증했고, 토스 앱의 전체 흐름은 사용자가 확인했습니다. 자세한 근거와 테스트 링크는 [PC 테스트 서버 검증](docs/superpowers/pc-test-server-verification.md)에 있습니다.
+
+실제 타로리더 원문과 품질 평가, 최종 UI·카드 연출·브랜드, 과금 정책 및 출시 준비는 남아 있습니다. 현재 합성 콘텐츠의 성공 결과는 실제 타로 해석 품질의 합격을 뜻하지 않습니다. 요구사항의 기준은 `docs/req.txt`와 `docs/spec.pdf`이며, `docs/ai-tarot-cli-handoff.md`는 사양서 없이 작성한 초기 참고 자료입니다.
+
+## 기능별 작업과 반영 경로
+
+기능 세션은 각 작업트리에서 수정하고 PR로 통합합니다. 아래 경로는 이 개발 PC에서 사용하는 구성이며 저장소의 필수 디렉터리 구조는 아닙니다. 자기 세션의 코드는 해당 작업트리에서 실행해야 확인할 수 있습니다.
+
+| Session | Worktree under `.worktrees/` | Scope |
+| --- | --- | --- |
+| Frontend | `session-frontend` | `ai-tarot/src/` |
+| Backend / AI | `session-backend-ai` | `server/src/ai/`, `server/src/readings/`, `server/src/worker/` |
+| Content | `session-content` | `content/`, `scripts/content/`, `docs/content/` |
+| Integration | `session-integration` | `contracts/`, migrations, `.github/`, `deploy/` |
+
+공통 파일 변경과 테스트 서버 재배포는 통합 세션에서 조정합니다. 다른 세션의 변경을 시험하려고 기존 작업트리의 브랜치를 임의로 전환하지 마세요. `main` 병합만으로 실행 중인 개발 서버나 토스 테스트 번들이 갱신되지는 않습니다.
+
+```text
+Feature worktree -> local test -> PR + CI + review -> main
+                                                      |
+                                     +----------------+----------------+
+                                     v                                 v
+                              API/worker deploy               .ait build + upload
+```
+
+## 브라우저에서 바로 확인하기
+
+공용 개발 서버는 아래 worktree의 코드를 사용합니다. 기능 세션의 작업트리에서 저장한 변경은 이 서버에 자동 반영되지 않습니다. 이미 실행 중이면 같은 포트로 다시 시작할 필요가 없습니다.
 
 ```sh
 cd /home/jhw/ai/opencode/projects/tossApp/.worktrees/backend-foundation
@@ -47,3 +74,27 @@ tmux -L tarororo-live attach -t dev
 ```
 
 개발 경로의 검증 결과는 [실시간 테스트 환경 검증](docs/superpowers/live-development-verification.md)에 기록합니다.
+
+## 독립적인 PC 테스트 배포
+
+토스 QR 테스트용 API·worker·전용 PostgreSQL과 백업/복원은 [PC 테스트 서버 안내](deploy/pc-test/README.md)를 따른다. API는 호스트의 `127.0.0.1:3200`에 바인딩하고, 실제 토스 mTLS 인증서를 준비한 뒤 Tailscale Funnel로 HTTPS를 연결한다. 기존 개발 환경과 테스트 배포는 DB와 실행 프로세스가 분리되어 있다. 현재 완료 여부는 [검증 기록](docs/superpowers/pc-test-server-verification.md)에 있다.
+
+기존 `.worktrees/backend-foundation` 경로는 공용 개발 서버와 백업 timer가 참조하므로 PR 병합 후에도 유지합니다. PC 테스트 서버의 HTTPS 주소는 API 주소이며, 폰에서 화면을 여는 방법은 검증 기록의 토스 테스트 링크 또는 QR을 따릅니다.
+
+## 자동 검증
+
+[CI](.github/workflows/ci.yml)는 PR과 `main` push에서 다음 명령을 실행합니다. 로컬에서는 Node `.nvmrc` 버전과 각 패키지의 기존 lockfile로 의존성을 준비한 뒤 해당 디렉터리에서 실행합니다.
+
+| Check | Directory | Command |
+| --- | --- | --- |
+| Frontend | `ai-tarot/` | `npm test` / `npm run typecheck` |
+| Server unit / types | `server/` | `npm test` / `npm run typecheck` |
+| PostgreSQL integration | `server/` | `npm run test:integration` |
+| Deployment unit | repository root | `python3 -B -m unittest discover -s deploy/pc-test -p test_manage.py` |
+| Content validation | repository root | `node --test scripts/content/*.test.mjs` |
+
+이 명령에는 `rtk` 설치가 필요하지 않습니다. 이 개발 PC의 에이전트 세션은 로컬 RTK 지침에 따라 명령 앞에 `rtk proxy`를 붙이며, GitHub CI와 일반 checkout에서는 표의 명령을 직접 실행합니다.
+
+PostgreSQL 통합 테스트에는 전용 테스트 DB의 `TEST_DATABASE_URL`이 필요합니다. 각 fixture가 고유 schema를 만들고 정리하므로 실제 서비스 DB를 지정하지 않습니다. CI는 임시 PostgreSQL 서비스를 사용하고 토스 인증서나 실제 AI 키 없이 검증합니다. 배포 도구의 실제 백업/복원 통합 시험과 토스 실기기 검증은 이 CI에 포함되지 않습니다.
+
+콘텐츠 테스트는 DB·네트워크·추가 의존성 설치 없이 CSV 파서, 입력 검증, dry-run CLI를 확인합니다. 원문 작성과 개별 파일 검증은 [콘텐츠 작성 안내](docs/content/README.md)를 따릅니다.

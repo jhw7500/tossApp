@@ -1,7 +1,19 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { readConfig } from '../src/config.ts';
+import * as configuration from '../src/config.ts';
+const { readConfig } = configuration;
+
+test('worker starts with DB and AI settings without API authentication secrets', () => {
+  assert.equal(typeof configuration.readWorkerConfig, 'function');
+  const config = configuration.readWorkerConfig({ DATABASE_URL: 'postgresql://db/test', GEMINI_API_KEY: 'worker-only' });
+  assert.equal(config.databaseUrl, 'postgresql://db/test');
+  assert.equal(config.ai.apiKey, 'worker-only');
+  assert.equal(config.ai.provider, 'gemini');
+  assert.throws(() => configuration.readWorkerConfig({ GEMINI_API_KEY: 'worker-only' }), /DATABASE_URL/);
+  assert.throws(() => configuration.readWorkerConfig({ DATABASE_URL: '   ', GEMINI_API_KEY: 'worker-only' }), /DATABASE_URL/);
+  assert.throws(() => configuration.readWorkerConfig({ DATABASE_URL: 'postgresql://db/test' }), /GEMINI_API_KEY/);
+});
 
 test('rejects mock authentication in production', () => {
   assert.throws(
