@@ -1,0 +1,2 @@
+card_code,interpretation_id,locale,version,is_active_version,source_kind,source_attribution,content
+the-fool,91000000-0000-4000-8000-000000000001,ko-KR,1,false,synthetic_test,synthetic test fixture,활성 버전이 없는 의도적 실패 자료

@@ -1,0 +1,7 @@
+card_code,interpretation_id,locale,version,is_active_version,source_kind,source_attribution,content
+the-fool,90000000-0000-4000-8000-000000000001,ko-KR,1,false,synthetic_test,synthetic test fixture,시험용 바보 해석의 이전 버전
+the-fool,90000000-0000-4000-8000-000000000001,ko-KR,2,true,synthetic_test,synthetic test fixture,"시험용 바보 해석, ""처음""의 가능성
+두 번째 줄입니다."
+the-fool,90000000-0000-4000-8000-000000000002,ko-KR,1,true,synthetic_test,synthetic test fixture,시험용 바보 해석 후보 2
+the-lovers,90000000-0000-4000-8000-000000000003,ko-KR,1,true,synthetic_test,synthetic test fixture,시험용 연인 해석 후보 1
+the-star,90000000-0000-4000-8000-000000000004,ko-KR,1,true,synthetic_test,synthetic test fixture,시험용 별 해석 후보 1
