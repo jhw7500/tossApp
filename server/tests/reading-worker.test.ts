@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import test from 'node:test';
 
-import type { ReadingContext, ReadingResult } from '../src/readings/types.ts';
+import type { ReadingContext, ReadingResult, ReadingUsage } from '../src/readings/types.ts';
 import type { GenerateReadingInput, ReadingProvider } from '../src/ai/types.ts';
 import { AiProviderError } from '../src/ai/types.ts';
 import { runWorker } from '../src/worker/run.ts';
@@ -42,6 +42,156 @@ test('worker claims an existing queue item once and persists a grounded result',
     const attempt = await fixture.pool.query('SELECT provider, model, usage FROM reading_attempts WHERE reading_id = $1', [created.json().readingId]);
     assert.deepEqual(attempt.rows[0], { provider: 'fixture', model: 'fixture-v1', usage: { totalTokens: 42 } });
   } finally { await fixture.close(); }
+});
+
+test('worker emits bounded lifecycle metadata for a successful attempt', async () => {
+  const fixture = await readingFixture();
+  try {
+    const created = await fixture.app.inject({ method: 'POST', url: '/v1/readings', headers: { ...fixture.headers, 'idempotency-key': randomUUID() }, payload: fixture.body });
+    const usage = { inputTokens: -1, totalTokens: 42, privateProviderTrace: 'private usage metadata' } as unknown as ReadingUsage;
+    const provider: ReadingProvider = { name: 'fixture', model: 'fixture-v1', aiGenerated: false, async generate(input) { return { result: grounded(input.context), usage }; } };
+    const events: Array<Record<string, unknown>> = [];
+    const controller = new AbortController();
+    const running = runWorker({
+      pool: fixture.pool,
+      provider,
+      signal: controller.signal,
+      pollIntervalMs: 5,
+      onEvent(event) { events.push(event); },
+    });
+    await waitForStatus(fixture.app, fixture.headers, created.json().readingId, 'SUCCEEDED');
+    controller.abort(); await running;
+
+    assert.equal(events.length, 2);
+    assert.deepEqual(Object.keys(events[0]).sort(), ['attemptId', 'attemptNo', 'event', 'model', 'provider', 'readingId'].sort());
+    assert.equal(events[0].event, 'reading_attempt_started');
+    assert.equal(events[0].readingId, created.json().readingId);
+    assert.equal(events[0].attemptNo, 1);
+    assert.equal(events[0].provider, 'fixture');
+    assert.equal(events[0].model, 'fixture-v1');
+
+    assert.deepEqual(Object.keys(events[1]).sort(), ['attemptId', 'attemptNo', 'durationMs', 'event', 'model', 'provider', 'readingId', 'status', 'usage'].sort());
+    assert.equal(events[1].event, 'reading_attempt_finished');
+    assert.equal(events[1].attemptId, events[0].attemptId);
+    assert.equal(events[1].status, 'SUCCEEDED');
+    assert.deepEqual(events[1].usage, { totalTokens: 42 });
+    assert.equal(Number.isFinite(events[1].durationMs) && Number(events[1].durationMs) >= 0, true);
+
+    const serialized = JSON.stringify(events);
+    assert.equal(serialized.includes(fixture.person.currentSituation), false);
+    assert.equal(serialized.includes('원문에 따른 해석'), false);
+    assert.equal(serialized.includes('private usage metadata'), false);
+    const attempt = await fixture.pool.query('SELECT usage FROM reading_attempts WHERE reading_id = $1', [created.json().readingId]);
+    assert.deepEqual(attempt.rows[0].usage, { totalTokens: 42 });
+  } finally { await fixture.close(); }
+});
+
+test('worker emits only a safe error code for a failed attempt', async () => {
+  const fixture = await readingFixture();
+  try {
+    const created = await fixture.app.inject({ method: 'POST', url: '/v1/readings', headers: { ...fixture.headers, 'idempotency-key': randomUUID() }, payload: fixture.body });
+    const provider: ReadingProvider = { name: 'fixture', model: 'fixture-v1', aiGenerated: false, async generate() { throw new AiProviderError('AI_RATE_LIMITED', true, 'private raw response'); } };
+    const events: Array<Record<string, unknown>> = [];
+    const controller = new AbortController();
+    const running = runWorker({
+      pool: fixture.pool,
+      provider,
+      signal: controller.signal,
+      pollIntervalMs: 5,
+      onEvent(event) { events.push(event); },
+    });
+    await waitForStatus(fixture.app, fixture.headers, created.json().readingId, 'FAILED');
+    controller.abort(); await running;
+
+    assert.equal(events.length, 2);
+    assert.deepEqual(Object.keys(events[1]).sort(), ['attemptId', 'attemptNo', 'durationMs', 'errorCode', 'event', 'model', 'provider', 'readingId', 'status'].sort());
+    assert.equal(events[1].status, 'FAILED');
+    assert.equal(events[1].errorCode, 'AI_RATE_LIMITED');
+    assert.equal(Number.isFinite(events[1].durationMs) && Number(events[1].durationMs) >= 0, true);
+    const serialized = JSON.stringify(events);
+    assert.equal(serialized.includes('private raw response'), false);
+    assert.equal(serialized.includes(fixture.person.currentSituation), false);
+  } finally { await fixture.close(); }
+});
+
+test('worker normalizes malformed provider error codes before logging', async () => {
+  const fixture = await readingFixture();
+  try {
+    const created = await fixture.app.inject({ method: 'POST', url: '/v1/readings', headers: { ...fixture.headers, 'idempotency-key': randomUUID() }, payload: fixture.body });
+    const provider: ReadingProvider = { name: 'fixture', model: 'fixture-v1', aiGenerated: false, async generate() { throw new AiProviderError('private provider code: account-42', true); } };
+    const events: Array<Record<string, unknown>> = [];
+    const controller = new AbortController();
+    const running = runWorker({
+      pool: fixture.pool,
+      provider,
+      signal: controller.signal,
+      pollIntervalMs: 5,
+      onEvent(event) { events.push(event); },
+    });
+    const detail = await waitForStatus(fixture.app, fixture.headers, created.json().readingId, 'FAILED');
+    controller.abort(); await running;
+
+    assert.equal(detail.error.code, 'AI_UNAVAILABLE');
+    assert.equal(events[1].errorCode, 'AI_UNAVAILABLE');
+    assert.equal(JSON.stringify(events).includes('account-42'), false);
+  } finally { await fixture.close(); }
+});
+
+test('worker event observer failures never change the reading outcome', async () => {
+  const fixture = await readingFixture();
+  const controller = new AbortController();
+  let running: Promise<void> | undefined;
+  try {
+    const created = await fixture.app.inject({ method: 'POST', url: '/v1/readings', headers: { ...fixture.headers, 'idempotency-key': randomUUID() }, payload: fixture.body });
+    let calls = 0;
+    const provider: ReadingProvider = { name: 'fixture', model: 'fixture-v1', aiGenerated: false, async generate(input) { calls++; return { result: grounded(input.context), usage: null }; } };
+    running = runWorker({
+      pool: fixture.pool,
+      provider,
+      signal: controller.signal,
+      pollIntervalMs: 5,
+      onEvent() { throw new Error('logger unavailable'); },
+    });
+    const outcome = await Promise.race([
+      waitForStatus(fixture.app, fixture.headers, created.json().readingId, 'SUCCEEDED').then(detail => ({ kind: 'status' as const, detail })),
+      running.then(() => ({ kind: 'stopped' as const }), error => ({ kind: 'error' as const, error })),
+    ]);
+
+    assert.equal(outcome.kind, 'status');
+    assert.equal(calls, 1);
+    controller.abort();
+    await running;
+  } finally {
+    controller.abort();
+    await running?.catch(() => undefined);
+    await fixture.close();
+  }
+});
+
+test('worker isolates rejected asynchronous event observers', async () => {
+  const fixture = await readingFixture();
+  const controller = new AbortController();
+  let running: Promise<void> | undefined;
+  try {
+    const created = await fixture.app.inject({ method: 'POST', url: '/v1/readings', headers: { ...fixture.headers, 'idempotency-key': randomUUID() }, payload: fixture.body });
+    let calls = 0;
+    const provider: ReadingProvider = { name: 'fixture', model: 'fixture-v1', aiGenerated: false, async generate(input) { calls++; return { result: grounded(input.context), usage: null }; } };
+    running = runWorker({
+      pool: fixture.pool,
+      provider,
+      signal: controller.signal,
+      pollIntervalMs: 5,
+      async onEvent() { throw new Error('async logger unavailable'); },
+    });
+    await waitForStatus(fixture.app, fixture.headers, created.json().readingId, 'SUCCEEDED');
+    controller.abort();
+    await running;
+    assert.equal(calls, 1);
+  } finally {
+    controller.abort();
+    await running?.catch(() => undefined);
+    await fixture.close();
+  }
 });
 
 test('worker records one safe failure and only an explicit retry calls the next provider', async () => {
@@ -167,8 +317,16 @@ test('late provider completion cannot replace an expired attempt', async () => {
     let release!: () => void;
     const gate = new Promise<void>(resolve => { release = resolve; });
     const provider: ReadingProvider = { name: 'fixture', model: 'slow-v1', aiGenerated: false, async generate(input) { await gate; return { result: grounded(input.context), usage: null }; } };
+    const events: Array<Record<string, unknown>> = [];
     const controller = new AbortController();
-    const running = runWorker({ pool: fixture.pool, provider, signal: controller.signal, concurrency: 1, pollIntervalMs: 5 });
+    const running = runWorker({
+      pool: fixture.pool,
+      provider,
+      signal: controller.signal,
+      concurrency: 1,
+      pollIntervalMs: 5,
+      onEvent(event) { events.push(event); },
+    });
     await waitForStatus(fixture.app, fixture.headers, created.json().readingId, 'RUNNING');
     await fixture.pool.query("UPDATE reading_attempts SET lease_expires_at = clock_timestamp() - interval '1 second' WHERE reading_id = $1", [created.json().readingId]);
     assert.equal(await expireReadings(fixture.pool), 1);
@@ -177,6 +335,42 @@ test('late provider completion cannot replace an expired attempt', async () => {
     controller.abort(); await running;
     assert.equal(failed.error.code, 'WORKER_TIMEOUT');
     assert.equal(failed.result, null);
+    assert.equal(events.length, 2);
+    assert.deepEqual(Object.keys(events[1]).sort(), ['attemptId', 'attemptNo', 'durationMs', 'event', 'model', 'provider', 'readingId', 'status'].sort());
+    assert.equal(events[1].status, 'STALE');
+    assert.equal(events[1].attemptId, events[0].attemptId);
+    assert.equal(Number.isFinite(events[1].durationMs) && Number(events[1].durationMs) >= 0, true);
+  } finally { await fixture.close(); }
+});
+
+test('late provider failure is reported as stale without leaking its error', async () => {
+  const fixture = await readingFixture();
+  try {
+    const created = await fixture.app.inject({ method: 'POST', url: '/v1/readings', headers: { ...fixture.headers, 'idempotency-key': randomUUID() }, payload: fixture.body });
+    let release!: () => void;
+    const gate = new Promise<void>(resolve => { release = resolve; });
+    const provider: ReadingProvider = { name: 'fixture', model: 'slow-v1', aiGenerated: false, async generate() { await gate; throw new AiProviderError('AI_RATE_LIMITED', true, 'private stale failure'); } };
+    const events: Array<Record<string, unknown>> = [];
+    const controller = new AbortController();
+    const running = runWorker({
+      pool: fixture.pool,
+      provider,
+      signal: controller.signal,
+      concurrency: 1,
+      pollIntervalMs: 5,
+      onEvent(event) { events.push(event); },
+    });
+    await waitForStatus(fixture.app, fixture.headers, created.json().readingId, 'RUNNING');
+    await fixture.pool.query("UPDATE reading_attempts SET lease_expires_at = clock_timestamp() - interval '1 second' WHERE reading_id = $1", [created.json().readingId]);
+    assert.equal(await expireReadings(fixture.pool), 1);
+    release();
+    await waitForStatus(fixture.app, fixture.headers, created.json().readingId, 'FAILED');
+    controller.abort(); await running;
+
+    assert.equal(events.length, 2);
+    assert.equal(events[1].status, 'STALE');
+    assert.equal('errorCode' in events[1], false);
+    assert.equal(JSON.stringify(events).includes('private stale failure'), false);
   } finally { await fixture.close(); }
 });
 

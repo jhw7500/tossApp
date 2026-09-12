@@ -5,7 +5,7 @@ import { pathToFileURL } from 'node:url';
 
 import type { Pool } from 'pg';
 
-const migrationNames = ['001_foundation.sql', '002_interpretation_candidates.sql', '003_reading_flow.sql'];
+const migrationNames = ['001_foundation.sql', '002_interpretation_candidates.sql', '003_reading_flow.sql', '004_subject_identity_rotation.sql'];
 
 export async function migrate(pool: Pool): Promise<void> {
   const migrations = await Promise.all(migrationNames.map(async (name) => ({ name, sql: await readFile(resolve(import.meta.dirname, '../../migrations', name), 'utf8') })));

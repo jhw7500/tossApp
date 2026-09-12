@@ -3,6 +3,10 @@ import { LEASE_SECONDS, MAX_READING_ATTEMPTS, QUEUE_TIMEOUT_SECONDS } from './co
 import { inTransaction } from './transaction.ts';
 import type { AttemptRow, ReadingClaim, ReadingCompletion, ReadingFailure, ReadingRow } from './types.ts';
 
+export function normalizeFailureCode(code: string): string {
+  return /^[A-Z][A-Z0-9_]{0,63}$/.test(code) ? code : 'AI_UNAVAILABLE';
+}
+
 export async function lockCurrentAttempt(client: PoolClient, reading: ReadingRow): Promise<AttemptRow> {
   return (await client.query<AttemptRow>(
     'SELECT * FROM reading_attempts WHERE reading_id = $1 AND attempt_no = $2 FOR UPDATE',
@@ -149,7 +153,7 @@ export async function failReading(pool: Pool, claim: ReadingClaim, failure: Read
     if (!reading) return false;
     // Failure messages originate at an external boundary; never persist provider bodies publicly.
     const error = {
-      code: /^[A-Z][A-Z0-9_]{0,63}$/.test(failure.code) ? failure.code : 'AI_UNAVAILABLE',
+      code: normalizeFailureCode(failure.code),
       message: 'reading could not be completed',
       retryable: failure.retryable && claim.attemptNo < MAX_READING_ATTEMPTS,
     };
