@@ -71,6 +71,24 @@ test('history state records whether an app-owned predecessor exists', () => {
   assert.equal(hasAppHistoryPredecessor(replaced), false)
 })
 
+test('a synchronous subscription failure is reported without escaping', () => {
+  const failure = new Error('bridge unavailable')
+  const errors: Error[] = []
+
+  assert.doesNotThrow(() => {
+    const cleanup = subscribeNativeBack({
+      active: true,
+      hasPreviousEntry: true,
+      subscribe: () => { throw failure },
+      goBack: () => undefined,
+      goToRoot: () => undefined,
+      onError: error => { errors.push(error) },
+    })
+    assert.equal(cleanup, undefined)
+  })
+  assert.deepEqual(errors, [failure])
+})
+
 test('the first screen leaves the native back event to the container', () => {
   let subscriptions = 0
 

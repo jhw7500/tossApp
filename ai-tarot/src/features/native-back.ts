@@ -32,8 +32,13 @@ export function withAppHistoryPredecessor(
 
 export function subscribeNativeBack(options: SubscribeNativeBackOptions): (() => void) | undefined {
   if (!options.active) return undefined
-  return options.subscribe('backEvent', {
-    onEvent: options.hasPreviousEntry ? options.goBack : options.goToRoot,
-    onError: options.onError,
-  })
+  try {
+    return options.subscribe('backEvent', {
+      onEvent: options.hasPreviousEntry ? options.goBack : options.goToRoot,
+      onError: options.onError,
+    })
+  } catch (error) {
+    options.onError(error instanceof Error ? error : new Error('Native back subscription failed'))
+    return undefined
+  }
 }

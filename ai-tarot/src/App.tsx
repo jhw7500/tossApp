@@ -50,7 +50,7 @@ const hrefFor = (route: Route): string => {
 function App() {
   useSafeArea()
   const [route, setRoute] = useState<Route>(readRoute)
-  const [hasPreviousEntry, setHasPreviousEntry] = useState(() => hasAppHistoryPredecessor(history.state))
+  const hasPreviousEntry = hasAppHistoryPredecessor(history.state)
   const [recovery, setRecovery] = useState<'checking' | 'idle' | 'uncertain'>('checking')
   const [recoveryMessage, setRecoveryMessage] = useState('')
   const serviceResult = useMemo(() => {
@@ -65,15 +65,11 @@ function App() {
       '',
       hrefFor(next),
     )
-    setHasPreviousEntry(nextHasPreviousEntry)
     setRoute(next)
   }, [])
 
   useEffect(() => {
-    const onPopState = (event: PopStateEvent) => {
-      setHasPreviousEntry(hasAppHistoryPredecessor(event.state))
-      setRoute(readRoute())
-    }
+    const onPopState = () => setRoute(readRoute())
     addEventListener('popstate', onPopState)
     return () => removeEventListener('popstate', onPopState)
   }, [])
