@@ -1,5 +1,50 @@
 # 프로젝트 인계: 앱인토스 AI 타로 서비스
 
+> 이 문서는 특정 worktree나 커밋의 상태표가 아니라 백엔드 구현 경계와 운영 중단 조건을 설명한다.
+> Git 상태, 리뷰, PR, CI 결과는 작업 시점의 저장소와 원격 시스템에서 직접 확인한다.
+> 아래 1~7절은 프로젝트 시작 당시의 **역사적 브리프 원문**이다. 현재 구현 및 운영 기준은 이 0절과 `server/README.md`가 우선한다.
+
+## 0. 백엔드 구현 인계
+
+### 구현 경계
+
+- API와 AI worker는 분리되어 있다. API는 Reading 작업을 저장·전이하고, 별도 worker가 AI provider를 호출한다.
+- 익명 사용자 identity는 활성 HMAC 비밀과 설정된 이전 비밀의 후보 hash를 한 transaction에서 확인·등록한다. 서로 다른 내부 사용자로 이미 갈라진 후보는 임의 병합하지 않고 session 생성을 rollback한다.
+- API 요청과 worker attempt는 제한된 JSON Lines 관측 이벤트를 stdout에 기록한다. 질문, 출처, 생성 결과, 자격 증명 등 민감한 본문은 이벤트 계약에 포함하지 않는다.
+- 품질 평가기는 결과 구조와 근거 참조를 검증하고, 사람 검토용 packet에 전체 후보 출처와 선택 여부를 포함한다. 의미 보존과 reader-content 품질 판정은 사람 검토가 필요하다.
+
+구현의 실제 내용은 `server/src/config.ts`, `server/src/auth/sessions.ts`, `server/src/stdout-writer.ts`, `server/src/ai/quality-evaluation.ts`와 관련 테스트를 기준으로 확인한다. 이 문서와 코드가 다르면 코드를 먼저 검토하고 문서를 갱신한다.
+
+### 검증 범위
+
+| 확인 대상 | 검증 방법 | 주장하지 않는 것 |
+| --- | --- | --- |
+| TypeScript와 단위 동작 | `cd server && npm run typecheck && npm test` | 운영 환경 동작 또는 실제 DB 호환성 |
+| PostgreSQL 경계 | 별도 승인된 격리 DB에 `TEST_DATABASE_URL`을 제공하고 `npm run test:integration` | 기존·공유·운영 DB migration 승인 |
+| 품질 평가 절차 | `npm run quality:evaluate -- fixtures/quality/synthetic-mechanics.json` | 합성 출처에 대한 reader-content `PASS` |
+| 통합 상태 | live Git diff, PR review, CI 결과 확인 | 과거 branch, HEAD, test count의 지속 유효성 |
+
+합성 후보가 하나라도 포함된 평가는 rubric이 모두 통과해도 `MECHANICS_ONLY`다. 검수된 실제 타로 리더 원문과 사람 검토가 없으면 reader-content `PASS`를 주장하지 않는다. 실제 Toss mTLS 자격 증명, QR 실기기 identity 동작, 운영 배포도 별도 환경에서 검증해야 한다.
+
+### 운영 승인과 중단 조건
+
+- 코드 통합은 기존·공유·운영 DB migration, 비밀 교체·폐기, service 재시작, 배포를 승인하지 않는다. 각 작업은 대상, 복구 절차, 담당자가 확인된 별도 운영 승인이 필요하다.
+- 기존 익명 identity가 다시 올 수 있는 동안 해당 버전의 이전 비밀을 보존한다. 최대 8개 이전 비밀 지원은 보존 정책이 아니며, session TTL이나 경과 시간만으로 안전한 폐기를 판단할 수 없다. 용량에 도달하면 오래된 비밀을 자동으로 버리지 말고 승인된 보존·복구 계획이 마련될 때까지 교체를 중단한다.
+- stdout 기록은 best effort다. backpressure 중에는 `drain`까지 새 event를 버리고, sink error 뒤에는 해당 process의 추가 쓰기를 영구 중단한다. 따라서 stdout event만으로 audit completeness를 주장하지 않으며, 이 구현이 별도 metric을 제공한다고 가정하지 않는다.
+- 실제 DB, Toss 자격 증명, AI API key 또는 운영 트래픽을 사용하는 명령은 문서 예시를 실행 근거로 삼지 않는다. 실행 전에 환경과 승인을 별도로 확인한다.
+- 소유가 확인되지 않은 process, container, schema 또는 다른 worktree의 개발 자원은 중단·삭제하지 않는다. Yocto/BitBake 작업과 관련 자원은 별도 승인 없이 시작하거나 중단하지 않는다.
+
+### 인계 시 확인 순서
+
+1. live worktree의 `git status`, branch, HEAD와 대상 PR/CI를 확인한다.
+2. 변경 파일과 운영 영향을 확인하고, 위 중단 조건에 해당하면 실행하지 않는다.
+3. 승인된 범위에서만 검증 명령을 실행하고, 실제 결과와 미검증 항목을 함께 기록한다.
+4. 검수된 reader source와 사람 reviewer가 준비되기 전에는 합성 fixture를 콘텐츠 승인 근거로 사용하지 않는다.
+
+---
+
+아래 내용은 프로젝트 시작 시점의 역사적 브리프이며, 1~7절 본문을 원문 그대로 보존한다.
+
 너는 이 프로젝트의 개발 파트너다. 아래 내용을 기준으로 현재 환경을 확인하고, 도구 구성과 첫 버전의 개발 계획을 제안해라. 아직 승인되지 않은 설계나 도구를 확정된 것으로 취급하지 마라.
 
 ## 1. 확정된 목표와 미정 사항
