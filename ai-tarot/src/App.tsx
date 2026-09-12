@@ -1,8 +1,10 @@
+import { graniteEvent } from '@apps-in-toss/web-framework'
 import { Button } from '@toss/tds-mobile'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 
 import { ClientConfigurationError, createBrowserService } from './api/service.ts'
 import type { AcceptedReading } from './api/types.ts'
+import { subscribeNativeBack } from './features/native-back.ts'
 import { useSafeArea } from './hooks/use-safe-area.ts'
 import { PersonDetailPage } from './pages/PersonDetailPage.tsx'
 import { PersonFormPage } from './pages/PersonFormPage.tsx'
@@ -61,6 +63,13 @@ function App() {
     addEventListener('popstate', onPopState)
     return () => removeEventListener('popstate', onPopState)
   }, [])
+
+  useEffect(() => subscribeNativeBack({
+    active: route.name !== 'persons',
+    subscribe: (event, handlers) => graniteEvent.addEventListener(event, handlers),
+    goBack: () => history.back(),
+    onError: error => console.error('앱인토스 뒤로가기 이벤트를 처리하지 못했어요.', error),
+  }), [route.name])
 
   const recover = useCallback(async () => {
     if (!serviceResult.service) return
