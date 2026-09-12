@@ -10,6 +10,7 @@ import {
   withAppHistoryPredecessor,
 } from './features/native-back.ts'
 import { useSafeArea } from './hooks/use-safe-area.ts'
+import { useKeyboardViewport } from './hooks/use-keyboard-viewport.ts'
 import { PersonDetailPage } from './pages/PersonDetailPage.tsx'
 import { PersonFormPage } from './pages/PersonFormPage.tsx'
 import { PersonsPage } from './pages/PersonsPage.tsx'
@@ -47,8 +48,18 @@ const hrefFor = (route: Route): string => {
   return `${location.pathname}?person=${encodeURIComponent(route.personId)}&reading=${encodeURIComponent(route.readingId)}`
 }
 
+const titleFor = (route: Route): string => ({
+  persons: '내 인연',
+  'person-new': '새 인연 등록',
+  person: '인연 정보',
+  'person-edit': '인연 정보 수정',
+  'reading-new': '새 리딩',
+  reading: '리딩 결과',
+})[route.name]
+
 function App() {
   useSafeArea()
+  useKeyboardViewport()
   const [route, setRoute] = useState<Route>(readRoute)
   const hasPreviousEntry = hasAppHistoryPredecessor(history.state)
   const [recovery, setRecovery] = useState<'checking' | 'idle' | 'uncertain'>('checking')
@@ -73,6 +84,15 @@ function App() {
     addEventListener('popstate', onPopState)
     return () => removeEventListener('popstate', onPopState)
   }, [])
+
+  useEffect(() => {
+    document.title = `${titleFor(route)} | tarororo`
+    const frame = requestAnimationFrame(() => {
+      window.scrollTo(0, 0)
+      document.querySelector<HTMLElement>('.page-title')?.focus({ preventScroll: true })
+    })
+    return () => cancelAnimationFrame(frame)
+  }, [route])
 
   useEffect(() => subscribeNativeBack({
     active: route.name !== 'persons',
