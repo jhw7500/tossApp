@@ -41,6 +41,17 @@ npm run worker
 
 Do not aim `db:migrate` or `db:seed` at an existing, shared, or production database without separate operational approval. Do not use this command block to justify a service restart or deployment. `db:seed` is idempotent and refuses production; it creates synthetic test content marked `source_kind=synthetic_test`, not tarot-reader source material.
 
+The `db:migrate` CLI and PC-test migration runner use a dedicated pool with a
+5-second connection/acquisition timeout. API, worker, and seed pool defaults are
+unchanged. This is not a SQL, advisory-lock, transaction, or whole-command timeout;
+those limits and isolated PostgreSQL verification remain separate work. A failed
+migration still attempts rollback. If rollback also fails, an `AggregateError`
+retains the original failure as `cause` and both failures in `errors`, and the
+uncertain connection is discarded instead of returned for reuse. Neither a client
+timeout nor a cleanup failure proves rollback, especially after a lost COMMIT
+response: inspect the database through an approved recovery procedure before
+retrying. Never infer deployment or key-rotation readiness from offline tests.
+
 Run the unit suite with `npm test`. The integration suite uses an actual PostgreSQL database and fails clearly without `TEST_DATABASE_URL` (put it in `.env` locally or provide it through the shell):
 
 ```sh
