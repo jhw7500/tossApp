@@ -2,9 +2,10 @@ import { buildApp } from './app.ts';
 import { readConfig } from './config.ts';
 import { createPool } from './db/pool.ts';
 import { createApiEventWriter } from './http/api-observability.ts';
+import { createStdoutWriter } from './stdout-writer.ts';
 
 const config = readConfig(); const pool = createPool(config.databaseUrl);
-const writeEvent = createApiEventWriter(line => { process.stdout.write(line); });
+const writeEvent = createApiEventWriter(createStdoutWriter());
 const app = await buildApp({
   config,
   pool,
