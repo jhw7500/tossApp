@@ -212,11 +212,11 @@ function buildCardSummary(activeRows, errors) {
     .slice(0, 3)
     .reduce((total, bytes) => total + bytes, 0);
 
-  if (largestThreeKoKrCandidateBytes > MAX_CONTEXT_BYTES) {
+  if (largestThreeKoKrCandidateBytes >= MAX_CONTEXT_BYTES) {
     errors.push(diagnostic(
       1,
       'context bytes',
-      '가장 큰 ko-KR 카드 3장의 원문 후보 합계가 64 KiB를 초과합니다.',
+      '가장 큰 ko-KR 카드 3장의 원문 후보 합계가 64 KiB에 도달하거나 초과합니다.',
     ));
   }
 

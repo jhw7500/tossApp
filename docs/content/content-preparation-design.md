@@ -70,7 +70,7 @@ strict parser -> row validation -> interpretation grouping
 6. 활성 후보를 서버 snapshot의 candidate 형태로 직렬화하여 UTF-8 바이트를 계산한다.
 7. 카드별 크기와 가장 큰 카드 3장의 후보 합계, 64 KiB 한도까지의 잔여량을 보고한다.
 
-용량 결과는 콘텐츠 후보 부분의 사전 검사다. 실제 runtime context에는 관계, 현재 상황, 질문, 카드 메타데이터, Position이 추가되므로 후보 합계가 64 KiB 이하여도 리딩 성공을 보장하지 않는다. 후보 합계가 64 KiB를 넘으면 어떤 실제 입력도 한도를 만족할 수 없으므로 오류로 처리한다. 그 이하는 정보성 수치로 출력하고 원문을 자동으로 자르지 않는다.
+용량 결과는 콘텐츠 후보 부분의 사전 검사다. 실제 runtime context에는 관계, 현재 상황, 질문, 카드 메타데이터, Position이 추가되므로 후보 합계가 64 KiB 미만이어도 리딩 성공을 보장하지 않는다. 후보 합계가 64 KiB에 도달하거나 넘으면 어떤 실제 입력도 한도를 만족할 수 없으므로 오류로 처리한다. 그 미만은 정보성 수치로 출력하고 원문을 자동으로 자르지 않는다.
 
 ## 결과와 오류 처리
 
@@ -96,7 +96,7 @@ strict parser -> row validation -> interpretation grouping
 - 빈 본문·출처, 잘못된 UUID·locale·version·boolean·source kind
 - 중복 ID/version, 그룹 메타데이터 불일치, 활성 버전 누락·중복
 - 카드당 활성 후보 20개 통과와 21개 실패
-- UTF-8 JSON 바이트 계산과 64 KiB 초과 실패
+- UTF-8 JSON 바이트 계산과 64 KiB 도달·초과 실패
 - 유효한 `synthetic_test` fixture의 CLI 성공과 손상된 fixture의 CLI 실패
 
 Node 24.12.0에서 단위 테스트와 실제 fixture dry-run을 실행한다. DB, 네트워크, AI API는 사용하지 않는다.

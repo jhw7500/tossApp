@@ -210,7 +210,7 @@ const expected = Buffer.byteLength(JSON.stringify([{
 assert.equal(result.summary.cards[0].candidateBytes, expected);
 ```
 
-큰 ASCII 본문으로 `ko-KR` 카드 세 개의 후보 배열 합계가 64 KiB를 넘으면 오류, 그 이하면 `remainingContextBytes`가 `65536 - 합계`인지 확인한다.
+큰 ASCII 본문으로 `ko-KR` 카드 세 개의 후보 배열 합계가 64 KiB에 도달하거나 넘으면 오류, 그 미만이면 `remainingContextBytes`가 `65536 - 합계`인지 확인한다.
 
 - [ ] **Step 7: 후보 수와 바이트 검사 구현**
 
@@ -225,7 +225,7 @@ const candidate = {
 const candidateBytes = Buffer.byteLength(JSON.stringify(candidates), 'utf8');
 ```
 
-카드·locale별 `cards` 결과는 `cardCode`, `locale`, `candidateCount`, `candidateBytes` 순서로 정렬한다. `ko-KR`에서 바이트가 큰 카드 세 개를 합산해 `largestThreeKoKrCandidateBytes`를 만들고 64 KiB를 넘으면 오류를 추가한다. 전체 runtime context의 성공 보장이 아니라는 경고 문구를 summary 출력용 상수로 제공한다.
+카드·locale별 `cards` 결과는 `cardCode`, `locale`, `candidateCount`, `candidateBytes` 순서로 정렬한다. `ko-KR`에서 바이트가 큰 카드 세 개를 합산해 `largestThreeKoKrCandidateBytes`를 만들고 64 KiB에 도달하거나 넘으면 오류를 추가한다. 전체 runtime context의 성공 보장이 아니라는 경고 문구를 summary 출력용 상수로 제공한다.
 
 - [ ] **Step 8: 검증 모듈 테스트 통과 확인**
 

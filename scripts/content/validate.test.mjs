@@ -262,3 +262,24 @@ test('the three largest ko-KR candidate arrays cannot exceed 64 KiB', () => {
   assert.equal(result.summary.remainingContextBytes, 0);
   assert.ok(hasDiagnostic(result, 'context bytes', /64 KiB/));
 });
+
+test('candidate arrays equal to 64 KiB are rejected before runtime metadata is added', () => {
+  const cardCodes = ['the-fool', 'the-lovers', 'the-star'];
+  const seedRows = cardCodes.map((cardCode, index) => row({
+    card_code: cardCode,
+    interpretation_id: uuid(index + 1),
+    content: 'x',
+  }));
+  const seed = validateContentCsv(csv(seedRows));
+  const padding = MAX_CONTEXT_BYTES - seed.summary.largestThreeKoKrCandidateBytes;
+  const exactRows = cardCodes.map((cardCode, index) => row({
+    card_code: cardCode,
+    interpretation_id: uuid(index + 1),
+    content: index === 0 ? 'x'.repeat(padding + 1) : 'x',
+  }));
+  const result = validateContentCsv(csv(exactRows));
+
+  assert.equal(result.summary.largestThreeKoKrCandidateBytes, MAX_CONTEXT_BYTES);
+  assert.equal(result.summary.remainingContextBytes, 0);
+  assert.ok(hasDiagnostic(result, 'context bytes', /64 KiB/));
+});
