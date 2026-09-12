@@ -1,141 +1,49 @@
 # 프로젝트 인계: 앱인토스 AI 타로 서비스
 
-> 최신 상태: 2026-09-12 KST. 아래 `0. 백엔드 구현 인계`가 현재 작업 상태다.
-> 뒤의 1~7절은 프로젝트 시작 당시의 역사적 브리프이며, 현재 구현 범위나 중단 조건보다 우선하지 않는다.
+> 이 문서는 특정 worktree나 커밋의 상태표가 아니라 백엔드 구현 경계와 운영 중단 조건을 설명한다.
+> Git 상태, 리뷰, PR, CI 결과는 작업 시점의 저장소와 원격 시스템에서 직접 확인한다.
+> 아래 1~7절은 프로젝트 시작 당시의 **역사적 브리프 원문**이다. 현재 구현 및 운영 기준은 이 0절과 `server/README.md`가 우선한다.
 
 ## 0. 백엔드 구현 인계
 
-### 인계 판정
+### 구현 경계
 
-`HANDOFF_READY`. 진행 중인 구현이나 테스트는 없고, 이 세션이 시작한 서버·컨테이너도 모두 종료했다. 현재 변경은 검증 완료된 미커밋 상태다. 새 기능을 시작하기 전에 OMX 관리 세션에서 변경 보존 방식, 커밋 구성, 최신 `origin/main` 통합 순서를 결정해야 한다.
+- API와 AI worker는 분리되어 있다. API는 Reading 작업을 저장·전이하고, 별도 worker가 AI provider를 호출한다.
+- 익명 사용자 identity는 활성 HMAC 비밀과 설정된 이전 비밀의 후보 hash를 한 transaction에서 확인·등록한다. 서로 다른 내부 사용자로 이미 갈라진 후보는 임의 병합하지 않고 session 생성을 rollback한다.
+- API 요청과 worker attempt는 제한된 JSON Lines 관측 이벤트를 stdout에 기록한다. 질문, 출처, 생성 결과, 자격 증명 등 민감한 본문은 이벤트 계약에 포함하지 않는다.
+- 품질 평가기는 결과 구조와 근거 참조를 검증하고, 사람 검토용 packet에 전체 후보 출처와 선택 여부를 포함한다. 의미 보존과 reader-content 품질 판정은 사람 검토가 필요하다.
 
-### Git 상태
+구현의 실제 내용은 `server/src/config.ts`, `server/src/auth/sessions.ts`, `server/src/stdout-writer.ts`, `server/src/ai/quality-evaluation.ts`와 관련 테스트를 기준으로 확인한다. 이 문서와 코드가 다르면 코드를 먼저 검토하고 문서를 갱신한다.
 
-| 항목 | 현재 값 |
-| --- | --- |
-| 저장소 | `jhw7500/tossApp` |
-| worktree | `/home/jhw/ai/opencode/projects/tossApp/.worktrees/session-backend-ai` |
-| 브랜치 | `feat/backend-ai-next` |
-| HEAD | `28bde738826d1758eb3422281ea396af777a9423` (`feat: paginate person and reading lists (#2)`) |
-| upstream | 없음 |
-| 원격 브랜치 | `origin/feat/backend-ai-next` 없음 |
-| 현재 브랜치 PR | 없음 |
-| 기준 브랜치 | `origin/main` = `18348b3` |
-| 기준과의 차이 | 로컬 고유 커밋 0개, `origin/main` 쪽 6개; merge-base는 현재 HEAD |
-| worktree 상태 | dirty, 모든 신규 구현이 미커밋 |
+### 검증 범위
 
-현재 세션에서 커밋·푸시·PR 생성은 하지 않았다. 현재 HEAD까지 포함된 기존 PR은 다음과 같다.
-
-- PR #1 `feat: implement AI tarot reading foundation`: MERGED, `2026-09-11T14:10:38Z`
-- PR #2 `feat: paginate person and reading lists`: MERGED, `2026-09-11T14:48:11Z`
-
-### 완료한 백엔드 작업
-
-1. 근거 기반 AI 리딩 품질 평가
-   - 전체 후보 출처와 선택 근거를 보존하는 사람 검토 패킷을 구현했다.
-   - 의미 보존, 근거 선택, 질문 맥락, 전체 흐름, 비단정적 언어의 다섯 기준을 검증한다.
-   - 합성 출처가 하나라도 있으면 결과를 항상 `MECHANICS_ONLY`로 제한한다.
-   - 실제 타로 리더 원문은 제공되지 않아 reader-content `PASS`는 주장하지 않는다.
-
-2. Worker 수명주기 관측
-   - `reading_attempt_started`와 `reading_attempt_finished` JSON Lines 이벤트를 추가했다.
-   - 내부 Reading/attempt ID, provider/model, 상태, 소요 시간, 안전한 token usage 또는 정규화한 오류 코드만 기록한다.
-   - 늦은 완료·실패는 `STALE`로 기록하며 동기·비동기 observer 실패가 작업 결과에 영향을 주지 않는다.
-
-3. API 관측
-   - 완료된 응답마다 `api_request_finished` 이벤트 하나를 기록한다.
-   - request ID, 상태 코드, 소요 시간, 정규화한 오류 코드만 허용한다.
-   - URL, IP, header, body, 세션/사용자/질문/출처/결과 정보가 Fastify 내부 로그로 새지 않도록 Fastify logger를 비활성화했다.
-   - graceful shutdown 중 이미 수락된 요청도 정상 수명주기 이벤트를 남긴다.
-
-4. 익명 사용자 HMAC 비밀키 교체
-   - `004_subject_identity_rotation.sql`에 identity alias 테이블, 기존 사용자 백필, 구 코드 사용자 삽입 포착 trigger를 추가했다.
-   - 활성 키와 이전 키 후보를 모두 조회·등록하고, 정렬된 PostgreSQL advisory lock으로 혼합 버전 동시 요청을 같은 사용자로 수렴시킨다.
-   - 키 교체 뒤에도 기존 세션, Person, Reading 소유권이 같은 내부 사용자 ID에 남는다.
-   - 이미 서로 다른 사용자로 갈라진 identity가 감지되면 임의 병합하지 않고 세션 생성을 롤백한다.
-   - `AUTH_SUBJECT_SECRET_VERSION`과 `AUTH_SUBJECT_PREVIOUS_SECRETS`를 검증하고 안전한 배포·보존 절차를 `server/README.md`와 `.env.example`에 기록했다.
-
-진행 중인 코드 작업은 없다. 위 네 작업은 각각 독립 리뷰를 거쳤고, 마지막 HMAC 재검토 결과는 Critical/Important/Minor 없음, `APPROVE`였다. API/Worker/품질 평가에서 발견된 이전 리뷰 지적도 수정 후 검증했다.
-
-### 최종 검증 결과
-
-| 검증 | 결과 |
-| --- | --- |
-| `npm test` | 45/45 통과 |
-| PostgreSQL `npm run test:integration` | 53/53 통과 |
-| `npm run typecheck` | 통과 |
-| `npm run quality:evaluate -- fixtures/quality/synthetic-mechanics.json` | `MECHANICS_ONLY`, failed criteria 없음 |
-| `git diff --check` | 통과 |
-| HMAC 혼합 버전 스트레스 검토 | 50 keys -> 50 users / 100 aliases, 사용자 분리 없음 |
-
-통합 테스트는 격리 schema와 임시 `postgres:16-alpine` 컨테이너를 사용했으며 외부 AI API를 호출하지 않았다.
-
-### 미커밋 변경
-
-Tracked 수정 17개(인계 문서 포함):
-
-```text
-M  docs/ai-tarot-cli-handoff.md
-M  server/.env.example
-M  server/README.md
-M  server/package.json
-M  server/src/app.ts
-M  server/src/auth/sessions.ts
-M  server/src/config.ts
-M  server/src/db/migrate.ts
-M  server/src/errors.ts
-M  server/src/main.ts
-M  server/src/readings/attempts.ts
-M  server/src/worker/main.ts
-M  server/src/worker/run.ts
-M  server/tests/config.test.ts
-M  server/tests/database.test.ts
-M  server/tests/helpers.ts
-M  server/tests/reading-worker.test.ts
-```
-
-Untracked 신규 파일 11개:
-
-```text
-server/fixtures/quality/synthetic-mechanics.json
-server/migrations/004_subject_identity_rotation.sql
-server/src/ai/evaluate-quality.ts
-server/src/ai/quality-evaluation.ts
-server/src/http/api-observability.ts
-server/src/worker/log.ts
-server/tests/api-log.test.ts
-server/tests/api-observability.test.ts
-server/tests/quality-evaluation.test.ts
-server/tests/subject-identity.test.ts
-server/tests/worker-log.test.ts
-```
-
-이 인계 문서 수정도 아직 커밋되지 않았다. `server/README.md`, `server/package.json`은 여러 완료 작업이 함께 수정한 공유 파일이므로 변경을 나눠 커밋할 때 hunk 단위 검토가 필요하다.
-
-### 남은 문제와 다음 작업
-
-- 알려진 Critical/Important 코드 결함은 없다.
-- 현재 브랜치는 `origin/main`보다 6커밋 뒤이고 worktree가 dirty다. 미커밋 변경을 보존하지 않은 채 reset, checkout, rebase, worktree 삭제를 실행하면 안 된다.
-- OMX 관리 세션의 첫 작업은 전체 diff와 이 문서를 확인한 뒤 커밋을 한 개로 묶을지 작업별로 나눌지 결정하는 것이다. 변경을 안전하게 보존한 후 `origin/main` 위로 통합하고 충돌을 해결한다.
-- 기준 브랜치 통합 뒤 단위 테스트, 전체 PostgreSQL 통합 테스트, typecheck, quality fixture, `git diff --check`를 다시 실행한다.
-- 실제 검수된 타로 리더 출처가 없으므로 reader-content 품질 평가는 여전히 남아 있다. 원문과 검토자를 확보하기 전에는 합성 fixture 결과를 콘텐츠 품질 통과로 바꾸지 않는다.
-- 실제 Toss mTLS 자격 증명, QR 실기기 식별키 동작, 운영 배포는 이 worktree에서 검증하지 않았다.
-- 다음 제품 기능은 선택하지 않았다. 브랜치 정리와 통합 판단 전에는 새 기능을 시작하지 않는다.
-
-### 실행 중 자원
-
-| 자원 | 상태 | 인계 조치 |
+| 확인 대상 | 검증 방법 | 주장하지 않는 것 |
 | --- | --- | --- |
-| `session-backend-ai`의 Node/API/worker 프로세스 | 없음 | 조치 없음 |
-| 이 세션의 임시 PostgreSQL 컨테이너 | 모두 제거 및 부재 확인 | 재사용하지 않음 |
-| tmux `tarororo-live:dev` | 실행 중, cwd는 `.worktrees/backend-foundation` | 다른 worktree의 공유 개발 환경이므로 유지 |
-| `tarororo-test-api-1` | 실행 중, healthy, `.worktrees/backend-foundation/deploy/pc-test` 소유 | 유지, 이 인계 작업에서 종료하지 않음 |
-| `tarororo-test-worker-1` | 실행 중, 같은 PC test stack 소유 | 유지, 이 인계 작업에서 종료하지 않음 |
-| `tarororo-test-db-1` | 실행 중, healthy, 같은 PC test stack 소유 | 유지, 이 인계 작업에서 종료하지 않음 |
-| `tossapp-foundation-3a44f8b2` | 실행 중인 `postgres:18-alpine`, 소유 세션 미확인 | 유지, 소유 확인 전 종료 금지 |
-| `frosty_lewin` | 실행 중인 `johyunwoo/imx93`, 이 백엔드 작업과 무관 | 유지, Yocto 관련 작업·중단 금지 |
+| TypeScript와 단위 동작 | `cd server && npm run typecheck && npm test` | 운영 환경 동작 또는 실제 DB 호환성 |
+| PostgreSQL 경계 | 별도 승인된 격리 DB에 `TEST_DATABASE_URL`을 제공하고 `npm run test:integration` | 기존·공유·운영 DB migration 승인 |
+| 품질 평가 절차 | `npm run quality:evaluate -- fixtures/quality/synthetic-mechanics.json` | 합성 출처에 대한 reader-content `PASS` |
+| 통합 상태 | live Git diff, PR review, CI 결과 확인 | 과거 branch, HEAD, test count의 지속 유효성 |
 
-이 백엔드 세션이 점유한 포트나 후속 정리가 필요한 테스트 schema는 없다.
+합성 후보가 하나라도 포함된 평가는 rubric이 모두 통과해도 `MECHANICS_ONLY`다. 검수된 실제 타로 리더 원문과 사람 검토가 없으면 reader-content `PASS`를 주장하지 않는다. 실제 Toss mTLS 자격 증명, QR 실기기 identity 동작, 운영 배포도 별도 환경에서 검증해야 한다.
+
+### 운영 승인과 중단 조건
+
+- 코드 통합은 기존·공유·운영 DB migration, 비밀 교체·폐기, service 재시작, 배포를 승인하지 않는다. 각 작업은 대상, 복구 절차, 담당자가 확인된 별도 운영 승인이 필요하다.
+- 기존 익명 identity가 다시 올 수 있는 동안 해당 버전의 이전 비밀을 보존한다. 최대 8개 이전 비밀 지원은 보존 정책이 아니며, session TTL이나 경과 시간만으로 안전한 폐기를 판단할 수 없다. 용량에 도달하면 오래된 비밀을 자동으로 버리지 말고 승인된 보존·복구 계획이 마련될 때까지 교체를 중단한다.
+- stdout 기록은 best effort다. backpressure 중에는 `drain`까지 새 event를 버리고, sink error 뒤에는 해당 process의 추가 쓰기를 영구 중단한다. 따라서 stdout event만으로 audit completeness를 주장하지 않으며, 이 구현이 별도 metric을 제공한다고 가정하지 않는다.
+- 실제 DB, Toss 자격 증명, AI API key 또는 운영 트래픽을 사용하는 명령은 문서 예시를 실행 근거로 삼지 않는다. 실행 전에 환경과 승인을 별도로 확인한다.
+- 소유가 확인되지 않은 process, container, schema 또는 다른 worktree의 개발 자원은 중단·삭제하지 않는다. Yocto/BitBake 작업과 관련 자원은 별도 승인 없이 시작하거나 중단하지 않는다.
+
+### 인계 시 확인 순서
+
+1. live worktree의 `git status`, branch, HEAD와 대상 PR/CI를 확인한다.
+2. 변경 파일과 운영 영향을 확인하고, 위 중단 조건에 해당하면 실행하지 않는다.
+3. 승인된 범위에서만 검증 명령을 실행하고, 실제 결과와 미검증 항목을 함께 기록한다.
+4. 검수된 reader source와 사람 reviewer가 준비되기 전에는 합성 fixture를 콘텐츠 승인 근거로 사용하지 않는다.
+
+---
+
+아래 내용은 프로젝트 시작 시점의 역사적 브리프이며, 1~7절 본문을 원문 그대로 보존한다.
 
 너는 이 프로젝트의 개발 파트너다. 아래 내용을 기준으로 현재 환경을 확인하고, 도구 구성과 첫 버전의 개발 계획을 제안해라. 아직 승인되지 않은 설계나 도구를 확정된 것으로 취급하지 마라.
 
