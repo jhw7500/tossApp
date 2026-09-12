@@ -35,8 +35,8 @@
 | `version` | PostgreSQL `integer`와 같은 1~2147483647 범위의 정수. 기존 버전은 수정하지 않고 새 행과 증가한 version으로 추가한다. |
 | `is_active_version` | `true` 또는 `false`. 각 `interpretation_id`에서 정확히 한 버전만 `true`여야 한다. |
 | `source_kind` | `editorial`, `licensed`, `synthetic_test` 중 하나. 실제 직접 작성 원문은 `editorial`을 사용한다. |
-| `source_attribution` | 작성자 또는 라이선스 출처. 공백만 있는 값은 허용하지 않는다. |
-| `content` | 원문 본문. 공백만 있는 값은 허용하지 않으며 줄바꿈은 CSV 인용 필드로 보존한다. |
+| `source_attribution` | 작성자 또는 라이선스 출처. 공백만 있는 값과 PostgreSQL이 저장할 수 없는 NUL 문자는 허용하지 않는다. |
+| `content` | 원문 본문. 공백만 있는 값과 NUL 문자는 허용하지 않으며 줄바꿈은 CSV 인용 필드로 보존한다. |
 
 한 행은 `interpretation_versions`의 불변 버전 하나를 나타낸다. `(interpretation_id, version)` 조합은 파일 전체에서 유일해야 한다. 같은 `interpretation_id`의 모든 행은 `card_code`와 정규화된 `locale`이 동일해야 한다. `source_kind`와 `source_attribution`은 각 불변 버전에 속하므로 새 버전에서 변경할 수 있다. version 번호에 빈 구간이 있어도 DB 제약과 동일하게 허용한다.
 
@@ -63,7 +63,7 @@ strict parser -> row validation -> interpretation grouping
 검증 단계는 다음과 같다.
 
 1. 파일이 UTF-8이고 헤더가 정확하며 모든 행의 열 수가 같은지 확인한다.
-2. 필수값, UUID, locale, 카드 코드 제어 문자, version 범위, boolean, 허용된 source kind를 확인한다.
+2. 필수값, UUID, locale, 카드 코드 제어 문자, DB 텍스트 필드의 NUL 문자, version 범위, boolean, 허용된 source kind를 확인한다.
 3. 중복 `(interpretation_id, version)`과 같은 ID 안의 불일치 필드를 확인한다.
 4. 각 interpretation에 활성 버전이 정확히 하나 있는지 확인한다.
 5. 카드·locale별 활성 interpretation 후보 수를 계산해 20개 초과를 오류로 처리한다.

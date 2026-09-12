@@ -121,6 +121,14 @@ test('required text fields reject ECMAScript whitespace', () => {
   assert.ok(hasDiagnostic(blankCard, 'card_code', /카드 코드/));
 });
 
+test('database text fields reject NUL characters', () => {
+  const nulAttribution = validateContentCsv(csv([row({ source_attribution: 'source\0name' })]));
+  const nulContent = validateContentCsv(csv([row({ content: '본문\0내용' })]));
+
+  assert.ok(hasDiagnostic(nulAttribution, 'source_attribution', /NUL/));
+  assert.ok(hasDiagnostic(nulContent, 'content', /NUL/));
+});
+
 test('typed fields reject malformed values', () => {
   const cases = [
     ['interpretation_id', 'not-a-uuid', /UUID/],

@@ -167,7 +167,7 @@ export function validateContentCsv(source) {
   // Exact headers and row widths are checked before named-field access.
   // Entirely blank physical records are ignored; an eight-column blank row is validated.
   // String visibility uses String.prototype.trim(), matching server whitespace behavior.
-  // UUID uses canonical 8-4-4-4-12 hexadecimal form; locale uses new Intl.Locale(value), and version fits PostgreSQL integer.
+  // UUID uses canonical 8-4-4-4-12 hexadecimal form; locale uses new Intl.Locale(value), version fits PostgreSQL integer, and DB text fields reject NUL.
   // Only rows with usable typed values participate in group checks.
   return { errors, warnings, summary };
 }

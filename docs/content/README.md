@@ -26,8 +26,8 @@ cp content/interpretations.template.csv content/my-interpretations.csv
 | `version` | 첫 버전은 `1`이며 변경할 때 2147483647 이하의 더 큰 정수로 새 행을 추가한다. 이전 행의 본문·출처·version은 덮어쓰지 않는다. |
 | `is_active_version` | 현재 사용할 버전 하나만 `true`, 나머지 버전은 `false`로 입력한다. 새 버전을 활성화할 때 이전 행에서는 이 표시만 `false`로 바꾼다. |
 | `source_kind` | 직접 작성은 `editorial`, 사용 권리를 확보한 외부 원문은 `licensed`, 도구 시험 자료만 `synthetic_test`다. |
-| `source_attribution` | 작성자 표시 또는 라이선스 출처를 공백 없이 기록한다. |
-| `content` | 타로리더가 작성한 원문 본문이다. 공백만 입력할 수 없다. |
+| `source_attribution` | 작성자 표시 또는 라이선스 출처를 공백 없이 기록한다. NUL 문자는 사용할 수 없다. |
+| `content` | 타로리더가 작성한 원문 본문이다. 공백만 입력하거나 NUL 문자를 포함할 수 없다. |
 
 새 원문에는 개발자가 발급한 UUID를 사용한다. 개발자가 로컬에서 UUID 하나를 만들 때는 Node 24에서 다음 명령을 사용할 수 있다.
 
@@ -60,7 +60,7 @@ node scripts/content/validate-content.mjs content/fixtures/synthetic-test.csv
 dry-run은 다음 항목을 확인한다.
 
 - 정확한 헤더와 행별 열 수
-- 필수값, UUID, locale, 제어 문자가 없는 카드 코드, 1~2147483647 범위의 정수 version, boolean, source kind
+- 필수값, UUID, locale, 제어 문자가 없는 카드 코드, DB 텍스트 필드의 NUL 문자, 1~2147483647 범위의 정수 version, boolean, source kind
 - 중복된 `(interpretation_id, version)`
 - 같은 원문 이력 안에서 변경된 카드 또는 locale
 - 원문마다 정확히 하나인 활성 버전

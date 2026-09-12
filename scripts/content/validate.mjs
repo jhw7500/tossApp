@@ -19,6 +19,7 @@ const SOURCE_KINDS = new Set(['editorial', 'licensed', 'synthetic_test']);
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const POSTGRES_INTEGER_MAX = 2_147_483_647;
 const CONTROL_CHARACTER_PATTERN = /\p{Cc}/u;
+const NUL_CHARACTER_PATTERN = /\u0000/u;
 
 function emptySummary() {
   return {
@@ -84,9 +85,13 @@ function validateRow(record, errors) {
   }
   if (!values.source_attribution.trim()) {
     errors.push(diagnostic(record.line, 'source_attribution', '출처 표기는 공백일 수 없습니다.'));
+  } else if (NUL_CHARACTER_PATTERN.test(values.source_attribution)) {
+    errors.push(diagnostic(record.line, 'source_attribution', '출처 표기는 NUL 문자를 포함할 수 없습니다.'));
   }
   if (!values.content.trim()) {
     errors.push(diagnostic(record.line, 'content', '본문은 공백일 수 없습니다.'));
+  } else if (NUL_CHARACTER_PATTERN.test(values.content)) {
+    errors.push(diagnostic(record.line, 'content', '본문은 NUL 문자를 포함할 수 없습니다.'));
   }
 
   if (errors.length !== rowErrorsBefore) return null;
