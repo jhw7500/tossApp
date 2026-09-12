@@ -186,6 +186,38 @@ class DeploymentBoundaries(unittest.TestCase):
         self.assertEqual(compose.call_args_list[-1].args,
                          ("exec", "-T", "db", "dropdb", "-U", "tarororo", created))
 
+    def test_backup_timer_requires_confirmed_lingering_before_writing_units(self):
+        for value in ["no\n", "", "unknown\n", subprocess.CalledProcessError(1, ["loginctl"])]:
+            with self.subTest(value=value), tempfile.TemporaryDirectory(dir=self.root) as name:
+                home = Path(name)
+                deployment = manage.Deployment()
+                result = subprocess.CompletedProcess([], 0, stdout=value)
+                with patch.object(deployment, "check"), patch.object(Path, "home", return_value=home), \
+                        patch.object(manage.subprocess, "run", return_value=result,
+                                     side_effect=value if isinstance(value, Exception) else None) as run:
+                    with self.assertRaises((ValueError, subprocess.CalledProcessError)):
+                        deployment.install_backup_timer()
+                self.assertFalse((home / ".config/systemd/user").exists())
+                self.assertEqual(len(run.call_args_list), 1)
+                self.assertEqual(run.call_args.args[0][0:2], ["loginctl", "show-user"])
+
+    def test_backup_timer_installs_when_lingering_is_enabled(self):
+        deployment = manage.Deployment()
+        directory = self.root / ".config/systemd/user"
+        def run_command(command, **kwargs):
+            if command[0] == "loginctl":
+                self.assertFalse(directory.exists())
+                return subprocess.CompletedProcess(command, 0, stdout="yes\n")
+            return subprocess.CompletedProcess(command, 0)
+        with patch.object(deployment, "check"), patch.object(Path, "home", return_value=self.root), \
+                patch.object(manage.subprocess, "run", side_effect=run_command) as run:
+            deployment.install_backup_timer()
+        for suffix in ["service", "timer"]:
+            manage.check_private(directory / f"tarororo-test-backup.{suffix}")
+        self.assertEqual([call.args[0] for call in run.call_args_list if call.args[0][0] == "systemctl"],
+                         [["systemctl", "--user", "daemon-reload"],
+                          ["systemctl", "--user", "enable", "--now", "tarororo-test-backup.timer"]])
+
     def test_certificate_pair_and_missing_key(self):
         validate = self.operation("validate_certificate")
         cert, key = self.root / "client.crt", self.root / "client.key"

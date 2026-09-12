@@ -242,6 +242,11 @@ class Deployment:
 
     def install_backup_timer(self):
         self.check(full=False)
+        linger = subprocess.run(["loginctl", "show-user", str(os.getuid()), "-p", "Linger", "--value"],
+                                check=True, capture_output=True, text=True, timeout=10).stdout.strip()
+        if linger != "yes":
+            raise ValueError(f"Backup timer requires Linger=yes. Run 'loginctl enable-linger {os.getuid()}' "
+                             "on this host, then retry install-backup-timer")
         # systemd quoting is not shell quoting; escape specifiers and reject newlines.
         def quote(value):
             value = str(value)
@@ -263,7 +268,6 @@ class Deployment:
             path.chmod(0o600)
         subprocess.run(["systemctl", "--user", "daemon-reload"], check=True)
         subprocess.run(["systemctl", "--user", "enable", "--now", "tarororo-test-backup.timer"], check=True)
-        subprocess.run(["loginctl", "show-user", str(os.getuid()), "-p", "Linger"], check=True)
 
     def publish(self):
         self.check()
