@@ -146,6 +146,52 @@ test('typed fields reject malformed values', () => {
   }
 });
 
+test('UUID versions outside the runtime v1-v5 contract are rejected', () => {
+  for (const version of ['7', '0', '6', '8', '9', 'a', 'b', 'c', 'd', 'e', 'f']) {
+    const id = `01234567-89ab-${version}def-8123-456789abcdef`;
+    const result = validateContentCsv(csv([row({ interpretation_id: id })]));
+
+    assert.ok(hasDiagnostic(result, 'interpretation_id', /UUID/), `should reject ${id}`);
+    assert.equal(result.summary.activeVersionCount, 0);
+  }
+});
+
+test('UUIDs outside the runtime RFC variant are rejected', () => {
+  for (const variant of ['0', '1', '2', '3', '4', '5', '6', '7', 'c', 'd', 'e', 'f']) {
+    const id = `01234567-89ab-4def-${variant}123-456789abcdef`;
+    const result = validateContentCsv(csv([row({ interpretation_id: id })]));
+
+    assert.ok(hasDiagnostic(result, 'interpretation_id', /UUID/), `should reject ${id}`);
+    assert.equal(result.summary.activeVersionCount, 0);
+  }
+});
+
+test('runtime-compatible UUID versions and variants accept either letter case', () => {
+  for (const version of ['1', '2', '3', '4', '5']) {
+    for (const variant of ['8', '9', 'a', 'b']) {
+      const id = `01234567-89ab-${version}def-${variant}123-456789abcdef`;
+      for (const value of [id, id.toUpperCase()]) {
+        const result = validateContentCsv(csv([row({ interpretation_id: value })]));
+
+        assert.deepEqual(result.errors, [], `should accept ${value}`);
+        assert.equal(result.summary.activeVersionCount, 1);
+      }
+    }
+  }
+});
+
+test('UUID letter case does not split an interpretation history', () => {
+  const id = '01234567-89ab-4def-a123-456789abcdef';
+  const result = validateContentCsv(csv([
+    row({ interpretation_id: id, version: '1', is_active_version: 'false' }),
+    row({ interpretation_id: id.toUpperCase(), version: '2' }),
+  ]));
+
+  assert.deepEqual(result.errors, []);
+  assert.equal(result.summary.interpretationCount, 1);
+  assert.equal(result.summary.activeVersionCount, 1);
+});
+
 test('PostgreSQL integer maximum is accepted as a version', () => {
   const result = validateContentCsv(csv([row({ version: '2147483647' })]));
 
