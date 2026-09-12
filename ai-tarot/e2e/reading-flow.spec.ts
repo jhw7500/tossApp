@@ -1,6 +1,7 @@
 import { expect, test, type Page, type Route } from '@playwright/test'
 import AxeBuilder from '@axe-core/playwright'
 import { createServer } from 'node:http'
+import { appOrigin, installNetworkIsolation } from './network-isolation'
 
 const personId = '00000000-0000-4000-8000-000000000101'
 const readingId = '00000000-0000-4000-8000-000000000201'
@@ -16,7 +17,6 @@ const longQuestion = '지금 이 관계에서 서로의 마음과 앞으로의 �
 const resultSummary = '천천히 이어지는 대화가 관계의 방향을 보여줘요'
 const longToken = 'https://example.test/' + 'unbroken-segment-'.repeat(24)
 const resultParagraphs = `첫 번째 원문 문단은 현재의 망설임을 충분히 설명해요. ${longToken}\n\n두 번째 원문 문단은 서두르지 않고 대화의 흐름을 살피라고 안내해요.`
-const appOrigin = 'http://127.0.0.1:4173'
 const poisonedApiBaseUrl = 'http://127.0.0.1:43999/poison'
 
 const json = (route: Route, body: unknown, status = 200) => route.fulfill({
@@ -24,20 +24,6 @@ const json = (route: Route, body: unknown, status = 200) => route.fulfill({
   contentType: 'application/json',
   body: JSON.stringify(body),
 })
-
-async function installNetworkIsolation(page: Page) {
-  const blockedRequests: string[] = []
-  await page.route('**/*', async route => {
-    const url = new URL(route.request().url())
-    const isApiPath = url.pathname === '/api' || url.pathname.startsWith('/api/')
-    const isAppResource = url.origin === appOrigin && !isApiPath
-    const isMockedApi = url.origin === appOrigin && url.pathname.startsWith('/api/v1/')
-    if (isAppResource || isMockedApi) return route.fallback()
-    blockedRequests.push(url.href)
-    return route.abort('blockedbyclient')
-  })
-  return blockedRequests
-}
 
 async function installApi(page: Page, seeded = false) {
   const blockedRequests = await installNetworkIsolation(page)
