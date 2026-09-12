@@ -21,6 +21,9 @@ ROOT = Path(__file__).resolve().parents[2]
 DEPLOY = ROOT / "deploy/pc-test"
 ORIGIN = "https://tarororo.private-apps.tossmini.com"
 DUMP_NAME = re.compile(r"tarororo-\d{8}T\d{12}Z\.dump")
+# Match the test catalog's ECMAScript trim predicate in server/src/readings/constants.ts.
+SOURCE_WHITESPACE = ("\u0009\u000a\u000b\u000c\u000d\u0020\u00a0\u1680\u2000\u2001\u2002\u2003"
+                     "\u2004\u2005\u2006\u2007\u2008\u2009\u200a\u2028\u2029\u202f\u205f\u3000\ufeff")
 
 
 def validate_definition(definition):
@@ -220,12 +223,13 @@ class Deployment:
                               "'readable_cards',(SELECT count(*) FROM tarot_cards c WHERE c.is_selectable AND EXISTS ("
                               "SELECT 1 FROM interpretations i JOIN interpretation_versions v "
                               "ON v.interpretation_id=i.id AND v.version=i.active_version "
-                              "WHERE i.tarot_card_id=c.id AND i.is_active AND i.locale='ko-KR')));")
+                              "WHERE i.tarot_card_id=c.id AND i.is_active AND i.locale='ko-KR' "
+                              f"AND length(btrim(v.content, '{SOURCE_WHITESPACE}')) > 0)));")
             restored = json.loads(counts)
             if restored["migrations"] < 3:
                 raise ValueError("Restored schema is incomplete")
             if restored["readable_cards"] < 3:
-                raise ValueError("Restored test catalog is incomplete: require three selectable cards with active interpretations")
+                raise ValueError("Restored test catalog is incomplete: require three selectable cards with nonblank active interpretations")
             print("Restore verified (test catalog present; pg_restore revalidated constraints): " + counts)
         finally:
             self.compose("exec", "-T", "db", "dropdb", "-U", "tarororo", database)
