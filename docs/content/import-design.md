@@ -50,6 +50,8 @@ planner는 파일·환경변수·시계·난수·DB·네트워크를 직접 읽�
 
 `parseCsv`를 따로 호출하여 UUID/locale/boolean/본문 규칙을 planner에서 재작성하지 않는다. 용량 계산 역시 현재 내부 `buildCardSummary`를 공유 가능한 순수 요약 함수로 분리하는 최소 변경을 제안한다. 확장은 검증기의 후속 담당 범위 승인이 필요하며 이 세션에서는 파일을 수정하지 않는다. UTF-8 decode는 현재 CLI와 같은 fatal 정책을 wrapper 입구에서 사용한다.
 
+입력 wrapper는 decode 전 원본 `csvBytes`의 SHA-256을 계산하고, 검증 성공 시에만 `ValidatedContentDocument { rows, rawCsvHash, validatorRevision }`를 구성해 planner에 전달하는 것을 제안한다(D1). `validatorRevision`은 호출자가 명시적으로 제공한다. planner는 이 문서의 `rows`로 계획을 계산하고 `rawCsvHash`를 결과의 `evidence.csvHash`로 전달한다. 정규화된 행을 재직렬화해서 원본 바이트 hash를 복원하려 하지 않는다. 이 전달 타입과 함수명은 아직 구현된 공개 API가 아니다.
+
 ## 3. 오프라인 입력과 출력 계약 제안
 
 ### 3.1 입력
@@ -57,6 +59,7 @@ planner는 파일·환경변수·시계·난수·DB·네트워크를 직접 읽�
 | 입력 | 필수 필드/의미 | 검증과 경계 |
 | --- | --- | --- |
 | `csvBytes` | 기존 [8열 템플릿](../../content/interpretations.template.csv)의 원본 바이트. 최초 시험에는 [기존 합성 fixture](../../content/fixtures/synthetic-test.csv)를 사용한다. | 원본 SHA-256을 기록하고 엄격히 decode한다. BOM/CSV 인용부호는 파서가 처리하되 본문·출처의 공백·줄바꿈·Unicode를 임의 정규화하지 않는다. |
+| `validatedDocument` | 입력 wrapper가 성공 시 구성하는 `rows`, `rawCsvHash`, `validatorRevision`. | planner에는 `csvBytes` 대신 이 값을 전달한다. raw hash 계산과 fatal decode는 wrapper 책임이며, 오류가 있는 문서에서 부분 행을 전달하지 않는다. |
 | `snapshot.header` | 제안 형식 버전, 합성 dataset ID, `contentSchemaProfile`, `coverage = full-content`, snapshot 식별자. | 모든 catalog·원문·버전 행을 담은 한 논리 시점이라는 입력 계약이다. scope 누락·불명 형식은 중단한다. 실제 추출 시점과 완전성은 추후 승인된 추출자가 보증해야 하며 선언만으로 DB 사실을 증명하지 않는다. |
 | `snapshot.cards[]` | `id`, `code`, `name`, `arcana`, `imageUrl`, `isSelectable`. | 전체 카드 PK와 code의 유일성을 확인한다. code는 검증된 문자열 그대로 정확히 매칭하고 trim/소문자화/별칭 추론을 하지 않는다. 새 카드를 자동 생성하지 않는다. |
 | `snapshot.interpretations[]` | `id`, `tarotCardId`, `locale`, `activeVersion: integer or null`, `isActive`. | 전체 원문을 모든 locale·활성/비활성 상태로 포함한다. CSV에 없는 원문도 충돌/후보 합산에 필요하다. 카드 FK와 원문 PK를 확인한다. |
@@ -71,7 +74,7 @@ snapshot의 UUID는 PostgreSQL 값과 같은 소문자 표현으로 비교한다
 ### 3.2 결과
 
 ```text
-planContentImport(validatedRows, snapshot, versionIdAllocations, options)
+planContentImport(validatedDocument, snapshot, versionIdAllocations, options)
   -> {
        status: READY | BLOCKED,
        evidence: { csvHash, snapshotHash, policyVersion, validatorRevision },
@@ -153,7 +156,7 @@ DB의 [기존 idempotency_requests](../../server/migrations/003_reading_flow.sql
 
 용량 계산은 CSV rows를 기존 활성 후보에 단순 추가하지 않는다. 먼저 version INSERT와 원문별 after 상태를 메모리에 반영한 뒤, 활성 원문에서 포인터가 선택한 비공백 본문의 한 버전만 후보로 만든다. ko-KR 소비 집합은 locale의 정확한 일치와 selectable 카드 조건까지 런타임에 맞춰 구한다. CSV에 없는 원문을 포함하고 교체된 같은 원문의 옛 버전은 이중 계산하지 않는다. 과거 비활성 이력에 CSV 작성 규칙을 소급 적용하거나 본문을 교정하지 않는다. stage의 저장 후 상태와 CSV 활성 의도를 적용한 preview를 구분해 보고한다.
 
-현재 validator와 동일한 candidate JSON 형태 및 공유 요약 함수를 사용한다. 카드/locale당 **20개는 허용, 21개는 실패**다. 가장 큰 `ko-KR` 세 카드의 후보 배열 UTF-8 합계가 **65536 이상이면 실패**다. stage에서도 예정 활성 preview가 이 제한을 넘으면 해당 묶음을 차단하는 보수적 정책을 제안한다(D4). selectable이 아닌 카드를 포함한 요약은 보수적인 사전 점검임을 표시한다. 카드가 3장 미만이면 있는 카드 합만 계산하므로 3장 리딩 가능 여부를 보장하지 않는다.
+현재 validator와 동일한 candidate JSON 형태 및 공유 요약 함수를 사용한다. 카드/locale당 **20개는 허용, 21개는 실패**다. 가장 큰 `ko-KR` 세 카드의 후보 배열 UTF-8 합계가 **65536 이상이면 실패**다. stage에서도 예정 활성 preview가 이 제한을 넘으면 해당 묶음을 차단하는 보수적 정책을 제안한다(D4). `capacity.storedAfter`와 `capacity.activationPreview`의 런타임 용량 집합은 selectable 카드만 포함한다. 비선택 카드까지 집계하는 보수적 요약이 필요하면 별도 `conservativeInventorySummary`로 표시하고 런타임 용량과 혼용하지 않는다. 이 추가 요약의 제공·차단 정책은 D4의 별도 결정이며 첫 구현의 필수 필드가 아니다. 카드가 3장 미만이면 있는 카드 합만 계산하므로 3장 리딩 가능 여부를 보장하지 않는다.
 
 실제 런타임은 [snapshot.ts](../../server/src/readings/snapshot.ts)에서 `Buffer.byteLength(JSON.stringify(toReadingContext(snapshot)), 'utf8') > 65536`일 때 실패한다. 따라서 **후보만 65536이면 실패**, **전체 context가 정확히 65536이면 바이트 조건은 통과**라는 차이를 유지한다. 관계·상황·질문·카드 메타데이터·position·JSON 감싸기 비용은 후보 합계에 없다. 후보 65535 성공은 전체 context 성공이 아니다. 첫 planner 결과는 `fullContext = NOT_PROVEN`으로 표시한다. 모든 조합의 성공을 주장하려면 별도 합성 최대길이 context 시험과 질문/catalog 범위 계약이 필요하다. 원문 절삭·후보 누락으로 크기를 맞추지 않는다.
 
@@ -260,6 +263,6 @@ commit 후 되돌리기는 transaction rollback과 다르다. 보존한 before �
 | content CSV와 scripts/content 모듈의 실행 전후 SHA-256 | 모두 일치. 기존 fixture/검증기 변경 없음. |
 | 신규 P/E/R 시험, DB 조회/생성, SQL 적용, import/활성화 | 미구현·미실행. 이 문서의 예상 결과를 실행 증거로 사용하지 않음. |
 
-로컬 raw 로그와 hash 기록은 현재 worktree의 `.omx/import-design-content-unit.log`, `.omx/import-design-synthetic-dry-run.log`, `.omx/import-design-baseline.json`에 보존한다. 최종 소스 대조·상대 링크·변경 범위·공백 검사 결과는 지정 인계 보고서에 기록한다.
+작성 세션은 raw 로그와 hash 기록을 그 세션의 비추적 로컬 `.omx/import-design-content-unit.log`, `.omx/import-design-synthetic-dry-run.log`, `.omx/import-design-baseline.json`에 남겼다. 이 파일들은 Git 산출물이 아니므로 다른 checkout에 존재하거나 장기 보존된다고 가정하지 않는다. 위 명령이 기존 도구 검증의 재현 경로이며, 최종 소스 대조·상대 링크·변경 범위·공백 검사 결과는 작성 세션의 인계 보고서에 기록했다.
 
 **정지점:** 이 초안과 미커밋 diff를 인계한 뒤 관리자 계약 검토를 기다린다. 이 세션에서 구현으로 전환하거나 커밋·푸시·PR·실제 DB 작업을 시작하지 않는다.
