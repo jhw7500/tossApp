@@ -12,7 +12,7 @@
     "build": "npm run typecheck && vite build && ait build",
     "preview": "vite preview",
     "lint": "eslint .",
-    "test": "node --experimental-strip-types --test src/api/client.test.ts src/features/pagination.test.ts src/features/person-conflict.test.ts dev/lan-crypto.test.mjs",
+    "test": "node --experimental-strip-types --test src/api/client.test.ts src/features/native-back.test.ts src/features/pagination.test.ts src/features/person-conflict.test.ts dev/lan-crypto.test.mjs",
     "format": "prettier --write .",
     "deploy": "ait deploy"
   },
