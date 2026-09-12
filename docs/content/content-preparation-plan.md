@@ -136,7 +136,7 @@ export const HEADERS = [
 ];
 ```
 
-테스트는 잘못된 헤더·열 수, 데이터 행 없음, 공백 본문·출처, 비 UUID, 잘못된 locale, 0·소수 version, `true|false` 이외 boolean, 허용되지 않은 source kind 각각이 해당 행과 열의 오류를 만드는지 확인한다.
+테스트는 잘못된 헤더·열 수, 데이터 행 없음, 공백 본문·출처, 제어 문자가 있는 카드 코드, 비 UUID, 잘못된 locale, 0·소수·2147483648 이상 version, `true|false` 이외 boolean, 허용되지 않은 source kind 각각이 해당 행과 열의 오류를 만드는지 확인한다.
 
 ```js
 const result = validateContentCsv(csvWith({ content: '　' }));
@@ -167,7 +167,7 @@ export function validateContentCsv(source) {
   // Exact headers and row widths are checked before named-field access.
   // Entirely blank physical records are ignored; an eight-column blank row is validated.
   // String visibility uses String.prototype.trim(), matching server whitespace behavior.
-  // UUID uses canonical 8-4-4-4-12 hexadecimal form; locale uses new Intl.Locale(value).
+  // UUID uses canonical 8-4-4-4-12 hexadecimal form; locale uses new Intl.Locale(value), and version fits PostgreSQL integer.
   // Only rows with usable typed values participate in group checks.
   return { errors, warnings, summary };
 }
@@ -178,11 +178,11 @@ export function validateContentCsv(source) {
 다음 테스트 자료를 각각 구성한다.
 
 - 같은 `(interpretation_id, version)` 두 행은 중복 오류다.
-- 같은 ID의 `card_code` 또는 `locale`이 바뀌면 오류다.
+- 같은 ID의 `card_code` 또는 정규화된 `locale`이 바뀌면 오류다.
 - 같은 ID의 활성 버전이 0개 또는 2개면 오류다.
 - version 1과 3만 있는 그룹은 유효하다.
 - 새 버전의 `source_kind`와 `source_attribution` 변경은 유효하다.
-- 유효한 `ko-KR` 외 locale마다 경고 하나를 만든다.
+- 정규화 결과가 `ko-KR`이 아닌 유효한 locale마다 경고 하나를 만든다.
 
 - [ ] **Step 5: 버전 그룹 검증 구현**
 

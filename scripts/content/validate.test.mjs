@@ -127,6 +127,7 @@ test('typed fields reject malformed values', () => {
     ['locale', 'ko_KR', /locale/],
     ['version', '0', /1 이상의 정수/],
     ['version', '1.5', /1 이상의 정수/],
+    ['version', '2147483648', /2147483647 이하/],
     ['is_active_version', 'TRUE', /true 또는 false/],
     ['source_kind', 'generated', /source_kind/],
   ];
@@ -135,6 +136,19 @@ test('typed fields reject malformed values', () => {
     const result = validateContentCsv(csv([row({ [column]: value })]));
     assert.ok(hasDiagnostic(result, column, message), `${column} should reject ${value}`);
   }
+});
+
+test('PostgreSQL integer maximum is accepted as a version', () => {
+  const result = validateContentCsv(csv([row({ version: '2147483647' })]));
+
+  assert.deepEqual(result.errors, []);
+  assert.equal(result.summary.cards[0].candidateCount, 1);
+});
+
+test('card codes reject control characters', () => {
+  const result = validateContentCsv(csv([row({ card_code: 'the-fool\nforged-line' })]));
+
+  assert.ok(hasDiagnostic(result, 'card_code', /제어 문자/));
 });
 
 test('duplicate interpretation versions are rejected with the first line', () => {
@@ -199,6 +213,18 @@ test('each valid locale outside ko-KR creates one warning', () => {
   assert.equal(result.warnings.length, 1);
   assert.equal(result.warnings[0].column, 'locale');
   assert.match(result.warnings[0].message, /현재 런타임/);
+});
+
+test('locale comparisons and summaries use the canonical locale', () => {
+  const result = validateContentCsv(csv([
+    row({ version: '1', is_active_version: 'false', locale: 'ko-kr' }),
+    row({ version: '2', locale: 'ko-KR' }),
+  ]));
+
+  assert.deepEqual(result.errors, []);
+  assert.deepEqual(result.warnings, []);
+  assert.equal(result.summary.cards[0].locale, 'ko-KR');
+  assert.ok(result.summary.largestThreeKoKrCandidateBytes > 0);
 });
 
 test('twenty active candidates pass and twenty-one fail for one card and locale', () => {

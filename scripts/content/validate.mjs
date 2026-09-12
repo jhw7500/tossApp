@@ -17,6 +17,8 @@ export const CONTEXT_LIMIT_NOTE = '이 수치는 원문 후보만 계산하며 �
 
 const SOURCE_KINDS = new Set(['editorial', 'licensed', 'synthetic_test']);
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const POSTGRES_INTEGER_MAX = 2_147_483_647;
+const CONTROL_CHARACTER_PATTERN = /\p{Cc}/u;
 
 function emptySummary() {
   return {
@@ -41,7 +43,9 @@ function isBlankRecord(record) {
 function parseVersion(value) {
   if (!/^\d+$/.test(value)) return null;
   const version = Number(value);
-  return Number.isSafeInteger(version) && version >= 1 ? version : null;
+  return Number.isSafeInteger(version) && version >= 1 && version <= POSTGRES_INTEGER_MAX
+    ? version
+    : null;
 }
 
 function parseLocale(value) {
@@ -58,6 +62,8 @@ function validateRow(record, errors) {
 
   if (!values.card_code.trim()) {
     errors.push(diagnostic(record.line, 'card_code', '카드 코드는 공백일 수 없습니다.'));
+  } else if (CONTROL_CHARACTER_PATTERN.test(values.card_code)) {
+    errors.push(diagnostic(record.line, 'card_code', '카드 코드는 제어 문자를 포함할 수 없습니다.'));
   }
   if (!UUID_PATTERN.test(values.interpretation_id)) {
     errors.push(diagnostic(record.line, 'interpretation_id', 'interpretation_id는 하이픈을 포함한 UUID여야 합니다.'));
@@ -68,7 +74,7 @@ function validateRow(record, errors) {
   }
   const version = parseVersion(values.version);
   if (version === null) {
-    errors.push(diagnostic(record.line, 'version', 'version은 1 이상의 정수여야 합니다.'));
+    errors.push(diagnostic(record.line, 'version', 'version은 1 이상의 정수이며 2147483647 이하여야 합니다.'));
   }
   if (values.is_active_version !== 'true' && values.is_active_version !== 'false') {
     errors.push(diagnostic(record.line, 'is_active_version', 'is_active_version은 true 또는 false여야 합니다.'));
@@ -89,8 +95,7 @@ function validateRow(record, errors) {
     line: record.line,
     cardCode: values.card_code,
     interpretationId: values.interpretation_id.toLowerCase(),
-    locale: values.locale,
-    canonicalLocale,
+    locale: canonicalLocale,
     version,
     isActiveVersion: values.is_active_version === 'true',
     sourceKind: values.source_kind,

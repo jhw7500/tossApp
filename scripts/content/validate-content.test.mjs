@@ -64,3 +64,20 @@ test('a missing file reports the requested path without a stack trace', () => {
   assert.match(run.stderr, /does-not-exist\.csv/);
   assert.doesNotMatch(run.stderr, /\n\s+at /);
 });
+
+test('a multiline card code is rejected before it can forge summary output', async t => {
+  const directory = await mkdtemp(join(tmpdir(), 'tarororo-content-'));
+  t.after(() => rm(directory, { recursive: true, force: true }));
+  const path = join(directory, 'multiline-card.csv');
+  await writeFile(path, [
+    'card_code,interpretation_id,locale,version,is_active_version,source_kind,source_attribution,content',
+    '"the-fool',
+    'forged-line",00000000-0000-4000-8000-000000000001,ko-KR,1,true,synthetic_test,test,text',
+  ].join('\n'));
+
+  const run = runCli(path);
+
+  assert.equal(run.status, 1);
+  assert.match(run.stderr, /card_code: 카드 코드는 제어 문자를 포함할 수 없습니다/);
+  assert.doesNotMatch(run.stdout, /forged-line/);
+});

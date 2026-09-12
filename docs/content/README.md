@@ -20,10 +20,10 @@ cp content/interpretations.template.csv content/my-interpretations.csv
 
 | 열 | 작성 규칙 |
 | --- | --- |
-| `card_code` | 개발자가 제공한 카드 코드를 입력한다. 같은 원문의 모든 버전에서 유지한다. |
+| `card_code` | 개발자가 제공한 카드 코드를 입력한다. 제어 문자를 포함할 수 없으며 같은 원문의 모든 버전에서 유지한다. |
 | `interpretation_id` | 원문 하나를 식별하는 UUID다. 내용을 수정해 새 버전을 만들 때도 같은 UUID를 유지한다. |
-| `locale` | 한국어 운영 원문은 정확히 `ko-KR`로 입력한다. |
-| `version` | 첫 버전은 `1`이며 변경할 때 더 큰 정수로 새 행을 추가한다. 이전 행의 본문·출처·version은 덮어쓰지 않는다. |
+| `locale` | 한국어 운영 원문은 `ko-KR`로 입력한다. 검증기는 유효한 태그를 `Intl.Locale` 정규형으로 비교한다. |
+| `version` | 첫 버전은 `1`이며 변경할 때 2147483647 이하의 더 큰 정수로 새 행을 추가한다. 이전 행의 본문·출처·version은 덮어쓰지 않는다. |
 | `is_active_version` | 현재 사용할 버전 하나만 `true`, 나머지 버전은 `false`로 입력한다. 새 버전을 활성화할 때 이전 행에서는 이 표시만 `false`로 바꾼다. |
 | `source_kind` | 직접 작성은 `editorial`, 사용 권리를 확보한 외부 원문은 `licensed`, 도구 시험 자료만 `synthetic_test`다. |
 | `source_attribution` | 작성자 표시 또는 라이선스 출처를 공백 없이 기록한다. |
@@ -60,7 +60,7 @@ node scripts/content/validate-content.mjs content/fixtures/synthetic-test.csv
 dry-run은 다음 항목을 확인한다.
 
 - 정확한 헤더와 행별 열 수
-- 필수값, UUID, locale, 양의 정수 version, boolean, source kind
+- 필수값, UUID, locale, 제어 문자가 없는 카드 코드, 1~2147483647 범위의 정수 version, boolean, source kind
 - 중복된 `(interpretation_id, version)`
 - 같은 원문 이력 안에서 변경된 카드 또는 locale
 - 원문마다 정확히 하나인 활성 버전
@@ -70,7 +70,7 @@ dry-run은 다음 항목을 확인한다.
 
 64 KiB 결과는 원문 후보 부분만 계산한다. 실제 리딩 context에는 관계, 현재 상황, 질문, 카드 메타데이터와 Position이 추가된다. 따라서 잔여 바이트가 양수여도 실제 모든 질문 조합의 성공을 보장하지 않으며, 도구는 한도를 맞추기 위해 원문을 자르지 않는다.
 
-현재 서버는 정확히 `ko-KR`인 활성 원문만 사용한다. 다른 유효한 locale은 데이터 오류로 보지 않지만 사용 전 확인하도록 경고한다.
+현재 서버는 정확히 `ko-KR`인 활성 원문만 사용한다. 검증기는 정규화 결과가 `ko-KR`인 태그를 같은 locale로 계산하며, 다른 유효한 locale은 데이터 오류로 보지 않지만 사용 전 확인하도록 경고한다. 후속 import도 검증된 정규형을 저장해야 한다.
 
 검증 통과는 DB import나 콘텐츠 활성화를 뜻하지 않는다. 통합 단계에서는 카드 코드가 DB catalog에 존재하는지, 같은 UUID/version이 이미 저장되어 있지 않은지 확인한 뒤 별도 import 절차를 거쳐야 한다.
 
