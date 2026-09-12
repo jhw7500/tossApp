@@ -24,6 +24,8 @@ dist-ssr
 *.sw?
 
 *.ait
+playwright-report/
+test-results/
 
 # Apps in Toss design-guide failure trace
 .ait-design-guide-failed
