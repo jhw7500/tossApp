@@ -2,8 +2,46 @@ import type { Pool } from 'pg';
 import { contextForClaim } from '../ai/context.ts';
 import { AiProviderError, type ReadingProvider } from '../ai/types.ts';
 import { validateReadingResult } from '../ai/validate.ts';
-import { claimNextReading, completeReading, expireReadings, failReading } from '../readings/attempts.ts';
-import type { ReadingClaim } from '../readings/types.ts';
+import { claimNextReading, completeReading, expireReadings, failReading, normalizeFailureCode } from '../readings/attempts.ts';
+import type { ReadingClaim, ReadingUsage } from '../readings/types.ts';
+
+export type WorkerEvent = {
+  event: 'reading_attempt_started';
+  readingId: string;
+  attemptId: string;
+  attemptNo: number;
+  provider: string;
+  model: string;
+} | {
+  event: 'reading_attempt_finished';
+  readingId: string;
+  attemptId: string;
+  attemptNo: number;
+  provider: string;
+  model: string;
+  status: 'SUCCEEDED';
+  durationMs: number;
+  usage: import('../readings/types.ts').ReadingUsage | null;
+} | {
+  event: 'reading_attempt_finished';
+  readingId: string;
+  attemptId: string;
+  attemptNo: number;
+  provider: string;
+  model: string;
+  status: 'FAILED';
+  durationMs: number;
+  errorCode: string;
+} | {
+  event: 'reading_attempt_finished';
+  readingId: string;
+  attemptId: string;
+  attemptNo: number;
+  provider: string;
+  model: string;
+  status: 'STALE';
+  durationMs: number;
+};
 
 export interface RunWorkerOptions {
   pool: Pool;
@@ -11,6 +49,32 @@ export interface RunWorkerOptions {
   signal: AbortSignal;
   concurrency?: number;
   pollIntervalMs?: number;
+  onEvent?: (event: WorkerEvent) => void | Promise<void>;
+}
+
+function emitWorkerEvent(onEvent: RunWorkerOptions['onEvent'], event: WorkerEvent): void {
+  try {
+    const pending = onEvent?.(event);
+    if (pending) void pending.catch(() => undefined);
+  } catch {
+    // Observability must never change claim processing or retry behavior.
+  }
+}
+
+function normalizeUsage(value: unknown): ReadingUsage | null {
+  if (!value || typeof value !== 'object') return null;
+  const source = value as Record<string, unknown>;
+  const take = (name: keyof ReadingUsage) => Number.isSafeInteger(source[name]) && (source[name] as number) >= 0
+    ? source[name] as number
+    : undefined;
+  const usage: ReadingUsage = {};
+  const inputTokens = take('inputTokens');
+  const outputTokens = take('outputTokens');
+  const totalTokens = take('totalTokens');
+  if (inputTokens !== undefined) usage.inputTokens = inputTokens;
+  if (outputTokens !== undefined) usage.outputTokens = outputTokens;
+  if (totalTokens !== undefined) usage.totalTokens = totalTokens;
+  return Object.keys(usage).length ? usage : null;
 }
 
 function abortableDelay(ms: number, signal: AbortSignal): Promise<void> {
@@ -22,17 +86,50 @@ function abortableDelay(ms: number, signal: AbortSignal): Promise<void> {
   });
 }
 
-async function processClaim(pool: Pool, provider: ReadingProvider, claim: ReadingClaim, signal: AbortSignal): Promise<void> {
+async function processClaim(
+  pool: Pool,
+  provider: ReadingProvider,
+  claim: ReadingClaim,
+  signal: AbortSignal,
+  startedAt: number,
+  onEvent?: RunWorkerOptions['onEvent'],
+): Promise<void> {
   try {
     const context = contextForClaim(claim);
     const generated = await provider.generate({ context, promptVersion: claim.promptVersion, contractVersion: claim.contractVersion, signal });
     const result = validateReadingResult(generated.result, context, claim.contractVersion);
-    await completeReading(pool, claim, { ...generated, result, aiGenerated: provider.aiGenerated });
+    const usage = normalizeUsage(generated.usage);
+    if (await completeReading(pool, claim, { ...generated, result, usage, aiGenerated: provider.aiGenerated })) {
+      emitWorkerEvent(onEvent, {
+        event: 'reading_attempt_finished', readingId: claim.readingId, attemptId: claim.attemptId,
+        attemptNo: claim.attemptNo, provider: provider.name, model: provider.model,
+        status: 'SUCCEEDED', durationMs: Math.max(0, Date.now() - startedAt), usage,
+      });
+    } else {
+      emitWorkerEvent(onEvent, {
+        event: 'reading_attempt_finished', readingId: claim.readingId, attemptId: claim.attemptId,
+        attemptNo: claim.attemptNo, provider: provider.name, model: provider.model,
+        status: 'STALE', durationMs: Math.max(0, Date.now() - startedAt),
+      });
+    }
   } catch (error) {
-    const failure = error instanceof AiProviderError
+    const rawFailure = error instanceof AiProviderError
       ? { code: error.code, message: error.message, retryable: error.retryable }
       : { code: 'AI_WORKER_FAILURE', message: 'AI worker failed', retryable: true };
-    await failReading(pool, claim, failure);
+    const failure = { ...rawFailure, code: normalizeFailureCode(rawFailure.code) };
+    if (await failReading(pool, claim, failure)) {
+      emitWorkerEvent(onEvent, {
+        event: 'reading_attempt_finished', readingId: claim.readingId, attemptId: claim.attemptId,
+        attemptNo: claim.attemptNo, provider: provider.name, model: provider.model,
+        status: 'FAILED', durationMs: Math.max(0, Date.now() - startedAt), errorCode: failure.code,
+      });
+    } else {
+      emitWorkerEvent(onEvent, {
+        event: 'reading_attempt_finished', readingId: claim.readingId, attemptId: claim.attemptId,
+        attemptNo: claim.attemptNo, provider: provider.name, model: provider.model,
+        status: 'STALE', durationMs: Math.max(0, Date.now() - startedAt),
+      });
+    }
   }
 }
 
@@ -49,7 +146,12 @@ export async function runWorker(options: RunWorkerOptions): Promise<void> {
   let loopFailure: unknown;
 
   function schedule(claim: ReadingClaim): void {
-    const task = processClaim(options.pool, options.provider, claim, signal)
+    const startedAt = Date.now();
+    emitWorkerEvent(options.onEvent, {
+      event: 'reading_attempt_started', readingId: claim.readingId, attemptId: claim.attemptId,
+      attemptNo: claim.attemptNo, provider: options.provider.name, model: options.provider.model,
+    });
+    const task = processClaim(options.pool, options.provider, claim, signal, startedAt, options.onEvent)
       .catch(error => {
         if (!hasProcessingFailure) {
           hasProcessingFailure = true;

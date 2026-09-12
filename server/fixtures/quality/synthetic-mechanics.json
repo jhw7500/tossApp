@@ -1,0 +1,118 @@
+{
+  "caseId": "synthetic-mechanics-example",
+  "context": {
+    "relationshipCode": "crush",
+    "currentSituation": "시험용 관계 상황",
+    "question": {
+      "id": "dddddddd-dddd-4ddd-8ddd-dddddddddddd",
+      "version": 1,
+      "text": "이 관계에서 살펴볼 점은?",
+      "isCustom": false
+    },
+    "cards": [
+      {
+        "cardId": "11111111-1111-4111-8111-111111111111",
+        "code": "test-card-1",
+        "name": "시험 카드 1",
+        "arcana": "major",
+        "imageUrl": null,
+        "positionIndex": 1,
+        "label": "현재",
+        "description": null,
+        "candidates": [
+          {
+            "interpretationId": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+            "version": 1,
+            "text": "구조 검증용 합성 원문 1",
+            "sourceKind": "synthetic_test",
+            "sourceAttribution": "synthetic quality fixture"
+          }
+        ]
+      },
+      {
+        "cardId": "22222222-2222-4222-8222-222222222222",
+        "code": "test-card-2",
+        "name": "시험 카드 2",
+        "arcana": "major",
+        "imageUrl": null,
+        "positionIndex": 2,
+        "label": "상대",
+        "description": null,
+        "candidates": [
+          {
+            "interpretationId": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+            "version": 1,
+            "text": "구조 검증용 합성 원문 2",
+            "sourceKind": "synthetic_test",
+            "sourceAttribution": "synthetic quality fixture"
+          }
+        ]
+      },
+      {
+        "cardId": "33333333-3333-4333-8333-333333333333",
+        "code": "test-card-3",
+        "name": "시험 카드 3",
+        "arcana": "major",
+        "imageUrl": null,
+        "positionIndex": 3,
+        "label": "흐름",
+        "description": null,
+        "candidates": [
+          {
+            "interpretationId": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+            "version": 1,
+            "text": "구조 검증용 합성 원문 3",
+            "sourceKind": "synthetic_test",
+            "sourceAttribution": "synthetic quality fixture"
+          }
+        ]
+      }
+    ]
+  },
+  "result": {
+    "cards": [
+      {
+        "positionIndex": 1,
+        "cardId": "11111111-1111-4111-8111-111111111111",
+        "text": "시험 카드 1의 구조 검증용 결과",
+        "evidence": [
+          {
+            "interpretationId": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+            "version": 1
+          }
+        ]
+      },
+      {
+        "positionIndex": 2,
+        "cardId": "22222222-2222-4222-8222-222222222222",
+        "text": "시험 카드 2의 구조 검증용 결과",
+        "evidence": [
+          {
+            "interpretationId": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+            "version": 1
+          }
+        ]
+      },
+      {
+        "positionIndex": 3,
+        "cardId": "33333333-3333-4333-8333-333333333333",
+        "text": "시험 카드 3의 구조 검증용 결과",
+        "evidence": [
+          {
+            "interpretationId": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+            "version": 1
+          }
+        ]
+      }
+    ],
+    "overallReading": "세 장의 구조 검증용 종합 결과",
+    "summary": "합성 데이터로 평가 절차만 확인합니다."
+  },
+  "review": {
+    "meaningPreservation": "pass",
+    "evidenceSelection": "pass",
+    "questionContext": "pass",
+    "overallFlow": "pass",
+    "nonDefinitiveLanguage": "pass"
+  }
+}

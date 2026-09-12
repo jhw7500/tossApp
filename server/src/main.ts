@@ -1,18 +1,24 @@
 import { buildApp } from './app.ts';
 import { readConfig } from './config.ts';
 import { createPool } from './db/pool.ts';
+import { createApiEventWriter } from './http/api-observability.ts';
+import { createStdoutWriter } from './stdout-writer.ts';
 
 const config = readConfig(); const pool = createPool(config.databaseUrl);
-const logger = { redact: { paths: ['req.headers.authorization', 'req.headers.x-anon-key', 'req.body.anonymousKey'], censor: '[REDACTED]' } };
-const app = await buildApp({ config, pool, logger });
+const writeEvent = createApiEventWriter(createStdoutWriter());
+const app = await buildApp({
+  config,
+  pool,
+  onEvent: writeEvent,
+});
 app.addHook('onClose', async () => { await pool.end(); });
 await app.listen({ host: config.host, port: config.port });
-app.log.info({ host: config.host, port: config.port }, 'Tarororo API listening');
+writeEvent({ event: 'api_listening', host: config.host, port: config.port });
 let closing = false;
-const close = async (signal: string): Promise<void> => {
+const close = async (signal: 'SIGINT' | 'SIGTERM'): Promise<void> => {
   if (closing) return;
   closing = true;
-  app.log.info({ signal }, 'shutting down Tarororo API');
+  writeEvent({ event: 'api_shutting_down', signal });
   await app.close();
 };
 process.once('SIGINT', () => { void close('SIGINT'); });

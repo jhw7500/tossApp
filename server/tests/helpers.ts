@@ -37,6 +37,8 @@ export const testConfig = {
   databaseUrl: 'postgresql://test',
   authMode: 'mock' as const,
   subjectSecret: 'a'.repeat(32),
+  subjectSecretVersion: 'v1',
+  previousSubjectSecrets: [],
   allowedOrigins: ['http://localhost:3000'],
 };
 

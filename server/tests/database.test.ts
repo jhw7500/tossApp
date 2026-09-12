@@ -41,6 +41,9 @@ test('legacy seed upgrades without changing position IDs and gains three indepen
     const migration = await readFile(resolve(import.meta.dirname, '../migrations/001_foundation.sql'), 'utf8');
     await pool.query(migration);
     await pool.query('INSERT INTO schema_migrations (name, checksum) VALUES ($1, $2)', ['001_foundation.sql', createHash('sha256').update(migration).digest('hex')]);
+    const legacyUserId = randomUUID();
+    const legacySubjectHash = 'f'.repeat(64);
+    await pool.query('INSERT INTO users (id, subject_hash) VALUES ($1, $2)', [legacyUserId, legacySubjectHash]);
     await pool.query("INSERT INTO relationship_types (code, label, sort_order) VALUES ('crush', '썸', 1), ('relationship', '연인', 2), ('friendship', '친구', 3), ('family', '가족', 4), ('custom', '직접 입력', 5)");
     await pool.query("INSERT INTO questions (id, relationship_code, prompt, is_custom_template, sort_order) VALUES ('10000000-0000-4000-8000-000000000001', 'crush', 'legacy crush', false, 1), ('10000000-0000-4000-8000-000000000002', 'friendship', 'legacy friendship', false, 1), ('10000000-0000-4000-8000-000000000003', 'custom', 'legacy custom', true, 1)");
     await pool.query("INSERT INTO card_positions (id, question_id, position, label) VALUES ('10000000-0000-4000-8000-000000000110', '10000000-0000-4000-8000-000000000001', 1, '현재'), ('10000000-0000-4000-8000-000000000210', '10000000-0000-4000-8000-000000000002', 1, '현재'), ('10000000-0000-4000-8000-000000000310', '10000000-0000-4000-8000-000000000003', 1, '현재')");
@@ -53,5 +56,9 @@ test('legacy seed upgrades without changing position IDs and gains three indepen
     assert.equal(candidates.rowCount, 3); assert.ok(candidates.rows.every((row) => row.count === 3));
     const legacyVersions = await pool.query("SELECT count(*)::integer AS count FROM interpretation_versions WHERE interpretation_id = '30000000-0000-4000-8000-000000000001'");
     assert.equal(legacyVersions.rows[0].count, 3);
+    assert.deepEqual(
+      (await pool.query('SELECT user_id, subject_hash, key_version FROM user_subject_identities WHERE user_id = $1', [legacyUserId])).rows,
+      [{ user_id: legacyUserId, subject_hash: legacySubjectHash, key_version: 'legacy' }],
+    );
   } finally { await dispose(); }
 });

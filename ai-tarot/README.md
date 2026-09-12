@@ -33,12 +33,15 @@ Vite가 출력하는 로컬 주소에서 화면을 확인한다. 브라우저용
 ```bash
 npm run typecheck
 npm test
+npm run test:e2e
 npm run lint
 npm run build
 npm run preview
 ```
 
 `build`는 타입 검사 후 `dist/`와 `tarororo.ait`를 생성한다. `preview`는 생성된 웹 번들을 로컬에서 제공한다. 빌드는 업로드·출시를 수행하지 않는다.
+
+`test:e2e`는 Playwright로 API 응답을 브라우저에서 가로채므로 실행 중인 서버나 DB를 변경하지 않는다. 320·390·480px에서 인연 등록부터 리딩 기록 재조회까지의 화면, 긴 원문, 키보드 축소, safe area, 접근성을 검사한다. Linux snap Chromium이 없으면 `PLAYWRIGHT_CHROMIUM_PATH`로 로컬 Chromium 실행 파일을 지정하거나 Chrome을 설치한다. `npm test`는 단위 테스트와 이 브라우저 검증을 함께 실행한다.
 
 배포용 번들에는 개발자 도구와 mock이 포함되지 않는다. 일반 브라우저의 `preview`에는 토스 호스트가 제공하는 값이 없어 화면 여백 조회 오류가 출력될 수 있다. 일반 브라우저에서 기능을 개발할 때는 `dev`를 사용하고, 실제 호스트 동작은 토스 앱에서 별도로 확인한다.
 

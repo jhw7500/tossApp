@@ -1,4 +1,5 @@
 import type { FastifyError, FastifyInstance } from 'fastify';
+import { normalizeApiErrorCode } from './http/api-observability.ts';
 
 export class HttpError extends Error {
   readonly statusCode: number;
@@ -13,12 +14,17 @@ export class HttpError extends Error {
 }
 
 export function installErrorHandler(app: FastifyInstance): void {
-  app.setNotFoundHandler((request, reply) => reply.status(404).send({ error: {
-    code: 'NOT_FOUND', message: 'resource not found', retryable: false, requestId: request.id,
-  } }));
+  app.setNotFoundHandler((request, reply) => {
+    request.apiErrorCode = 'NOT_FOUND';
+    return reply.status(404).send({ error: {
+      code: 'NOT_FOUND', message: 'resource not found', retryable: false, requestId: request.id,
+    } });
+  });
   app.setErrorHandler((error: FastifyError | HttpError, request, reply) => {
-    const send = (status: number, code: string, message: string, retryable = false) =>
-      reply.status(status).send({ error: { code, message, retryable, requestId: request.id } });
+    const send = (status: number, code: string, message: string, retryable = false) => {
+      request.apiErrorCode = normalizeApiErrorCode(code);
+      return reply.status(status).send({ error: { code, message, retryable, requestId: request.id } });
+    };
     if ('validation' in error && error.validation) return send(400, 'INVALID_INPUT', 'invalid request input');
     if (error instanceof HttpError) return send(error.statusCode, error.code, error.message, error.retryable);
     if (typeof error.statusCode === 'number' && error.statusCode >= 400 && error.statusCode < 500) {
