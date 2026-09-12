@@ -10,7 +10,9 @@
 .env
 .env.*
 !.env.example
+/docs/mTLS_*/
 node_modules/
+__pycache__/
 dist/
 build/
 coverage/

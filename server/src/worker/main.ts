@@ -1,12 +1,10 @@
 import { GeminiProvider } from '../ai/gemini.ts';
-import { readAiConfig } from '../ai/config.ts';
-import { readConfig } from '../config.ts';
+import { readWorkerConfig } from '../config.ts';
 import { createPool } from '../db/pool.ts';
 import { runWorker } from './run.ts';
 
-const foundation = readConfig();
-const ai = readAiConfig();
-const pool = createPool(foundation.databaseUrl);
+const { databaseUrl, ai } = readWorkerConfig();
+const pool = createPool(databaseUrl);
 const controller = new AbortController();
 let stopping = false;
 

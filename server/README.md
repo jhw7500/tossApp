@@ -61,6 +61,8 @@ The API stores and transitions jobs; the separate AI worker consumes these inter
 
 Run the worker as a separate process with `AI_PROVIDER=gemini`, `AI_MODEL` (default `gemini-3.1-flash-lite`), and `GEMINI_API_KEY` in its environment. The key stays server-side. The worker uses the fixed official Generate Content endpoint, rejects redirects, caps requests at 20 seconds and responses at 256 KiB, and never automatically retries a provider call. `SIGINT` and `SIGTERM` abort in-flight generation, stop new claims, and close the worker database pool.
 
+The worker reads only `DATABASE_URL` and AI settings; API identity secrets and Toss mTLS files are not required by the worker. The PC test deployment mounts role-specific secrets at runtime and maintains a separate test database; see [deployment instructions](../deploy/pc-test/README.md).
+
 ```typescript
 import { claimNextReading, completeReading, failReading, expireReadings } from './src/readings/attempts.ts';
 import { toReadingContext } from './src/readings/snapshot.ts';
