@@ -1,6 +1,6 @@
 # Shared workflow configuration for jhw7500/automation.
-automation_ref: v1.73
-automation_commit: 3d60f3baaa45820f7260912efea3ffcf45c10b07
+automation_ref: v1.78.1
+automation_commit: 72e0cfad8020a1fe40352b70ddb6438791c58f00
 
 review:
   auto: true
