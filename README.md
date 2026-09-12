@@ -87,9 +87,11 @@ tmux -L tarororo-live attach -t dev
 
 | Check | Directory | Command |
 | --- | --- | --- |
-| Frontend | `ai-tarot/` | `rtk proxy npm test` / `rtk proxy npm run typecheck` |
-| Server unit / types | `server/` | `rtk proxy npm test` / `rtk proxy npm run typecheck` |
-| PostgreSQL integration | `server/` | `rtk proxy npm run test:integration` |
-| Deployment unit | repository root | `rtk proxy python3 -B -m unittest discover -s deploy/pc-test -p test_manage.py` |
+| Frontend | `ai-tarot/` | `npm test` / `npm run typecheck` |
+| Server unit / types | `server/` | `npm test` / `npm run typecheck` |
+| PostgreSQL integration | `server/` | `npm run test:integration` |
+| Deployment unit | repository root | `python3 -B -m unittest discover -s deploy/pc-test -p test_manage.py` |
+
+이 명령에는 `rtk` 설치가 필요하지 않습니다. 이 개발 PC의 에이전트 세션은 로컬 RTK 지침에 따라 명령 앞에 `rtk proxy`를 붙이며, GitHub CI와 일반 checkout에서는 표의 명령을 직접 실행합니다.
 
 PostgreSQL 통합 테스트에는 전용 테스트 DB의 `TEST_DATABASE_URL`이 필요합니다. 각 fixture가 고유 schema를 만들고 정리하므로 실제 서비스 DB를 지정하지 않습니다. CI는 임시 PostgreSQL 서비스를 사용하고 토스 인증서나 실제 AI 키 없이 검증합니다. 배포 도구의 실제 백업/복원 통합 시험과 토스 실기기 검증은 이 CI에 포함되지 않습니다.
