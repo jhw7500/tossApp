@@ -58,7 +58,9 @@ rtk proxy python3 deploy/pc-test/manage.py install-backup-timer
 rtk proxy systemctl --user list-timers tarororo-test-backup.timer
 ```
 
-백업은 `~/.local/share/tarororo-test/backups/`에 저장한다. PostgreSQL custom dump를 성공한 뒤에만 완료 파일로 확정하고 최근 7개를 유지한다. 실패하면 마지막 정상 백업을 보존한다. 복원 확인은 무작위 이름의 별도 DB를 만들고, 스키마·데이터·제약 복원 및 테이블 수를 검사한 뒤 그 임시 DB만 삭제한다. 특정 파일은 `restore-check /절대경로/파일.dump`로 지정한다.
+백업은 `~/.local/share/tarororo-test/backups/`에 저장한다. PostgreSQL custom dump를 성공한 뒤에만 완료 파일로 확정하고 최근 7개를 유지한다. 실패하면 마지막 정상 백업을 보존한다. 복원 확인은 무작위 이름의 별도 DB를 만들고, 스키마·데이터·제약 복원 및 테이블별 행 수를 검사한 뒤 그 임시 DB만 삭제한다. 특정 파일은 `restore-check /절대경로/파일.dump`로 지정한다.
+
+`restore-check`는 시험 콘텐츠를 넣은 DB를 기준으로 한다. 선택 가능한 카드가 3장 이상이고 각 카드에 활성 한국어 해석 버전이 연결되어 있어야 성공한다. migration 이력만 있고 콘텐츠가 빠진 덤프는 실패하며, 아직 Person·Reading이 없는 초기 시험 DB는 허용한다. 이 검사는 복원 가능성·최소 콘텐츠·DB 제약을 확인한다. 백업 시점의 전체 행 수와 대조하는 검사는 아니므로 일부 사용자 데이터 누락까지 판별하지는 않는다.
 
 timer는 호스트 시간대 기준 매일 04:00부터 최대 5분 이내에 실행하며 놓친 실행을 보충한다. `Linger=yes`여야 로그아웃 후에도 user manager가 유지된다. 현재 PC는 이미 설정되어 있다. 설치된 unit은 현재 checkout의 관리 스크립트를 참조하므로 worktree 이동/삭제 전에 새 경로에서 다시 설치하거나 timer를 해제해야 한다. 사용자 unit의 재부팅 후 실행과 Docker 시작은 실제 호스트 부팅 조건에 의존한다.
 

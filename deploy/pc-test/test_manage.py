@@ -150,6 +150,42 @@ class DeploymentBoundaries(unittest.TestCase):
             backup(self.root, lambda output: None)
         self.assertEqual(list(self.root.iterdir()), [])
 
+    def test_restore_rejects_missing_or_unusable_catalog_and_cleans_up(self):
+        path = self.root / "fixture.dump"
+        path.write_bytes(b"fixture")
+        path.chmod(0o600)
+        for cards, versions, readable in [(0, 0, 0), (3, 0, 0), (3, 15, 2)]:
+            with self.subTest(cards=cards, versions=versions, readable=readable):
+                counts = {"migrations": 3, "cards": cards, "persons": 0, "readings": 0,
+                          "interpretation_versions": versions, "readable_cards": readable}
+                deployment = manage.Deployment()
+                with patch.object(deployment, "check"), patch.object(deployment, "compose") as compose, \
+                        patch.object(deployment, "sql", return_value=json.dumps(counts)), \
+                        patch("sys.stdout", new_callable=io.StringIO) as output:
+                    with self.assertRaisesRegex(ValueError, "catalog"):
+                        deployment.restore_check(path)
+                self.assertNotIn("Restore verified", output.getvalue())
+                created = compose.call_args_list[0].args[-1]
+                self.assertTrue(created.startswith("tarororo_restore_"))
+                self.assertEqual(compose.call_args_list[-1].args,
+                                 ("exec", "-T", "db", "dropdb", "-U", "tarororo", created))
+
+    def test_restore_accepts_seeded_catalog_without_persons_or_readings(self):
+        path = self.root / "fixture.dump"
+        path.write_bytes(b"fixture")
+        path.chmod(0o600)
+        counts = {"migrations": 3, "cards": 3, "persons": 0, "readings": 0,
+                  "interpretation_versions": 15, "readable_cards": 3}
+        deployment = manage.Deployment()
+        with patch.object(deployment, "check"), patch.object(deployment, "compose") as compose, \
+                patch.object(deployment, "sql", return_value=json.dumps(counts)), \
+                patch("sys.stdout", new_callable=io.StringIO) as output:
+            deployment.restore_check(path)
+        self.assertIn("Restore verified", output.getvalue())
+        created = compose.call_args_list[0].args[-1]
+        self.assertEqual(compose.call_args_list[-1].args,
+                         ("exec", "-T", "db", "dropdb", "-U", "tarororo", created))
+
     def test_certificate_pair_and_missing_key(self):
         validate = self.operation("validate_certificate")
         cert, key = self.root / "client.crt", self.root / "client.key"

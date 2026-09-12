@@ -216,10 +216,17 @@ class Deployment:
             counts = self.sql(database, "SELECT json_build_object('migrations',(SELECT count(*) FROM schema_migrations),"
                               "'cards',(SELECT count(*) FROM tarot_cards),'persons',(SELECT count(*) FROM persons),"
                               "'readings',(SELECT count(*) FROM readings),"
-                              "'interpretation_versions',(SELECT count(*) FROM interpretation_versions));")
-            if json.loads(counts)["migrations"] < 3:
+                              "'interpretation_versions',(SELECT count(*) FROM interpretation_versions),"
+                              "'readable_cards',(SELECT count(*) FROM tarot_cards c WHERE c.is_selectable AND EXISTS ("
+                              "SELECT 1 FROM interpretations i JOIN interpretation_versions v "
+                              "ON v.interpretation_id=i.id AND v.version=i.active_version "
+                              "WHERE i.tarot_card_id=c.id AND i.is_active AND i.locale='ko-KR')));")
+            restored = json.loads(counts)
+            if restored["migrations"] < 3:
                 raise ValueError("Restored schema is incomplete")
-            print("Restore verified (pg_restore revalidated constraints): " + counts)
+            if restored["readable_cards"] < 3:
+                raise ValueError("Restored test catalog is incomplete: require three selectable cards with active interpretations")
+            print("Restore verified (test catalog present; pg_restore revalidated constraints): " + counts)
         finally:
             self.compose("exec", "-T", "db", "dropdb", "-U", "tarororo", database)
 
