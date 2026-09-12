@@ -1,0 +1,103 @@
+name: tarororo-test
+
+x-app: &app
+  image: tarororo-pc-test:local
+  build:
+    context: ../..
+    dockerfile: deploy/pc-test/Dockerfile
+  user: "${TARORORO_UID:?Use manage.py}:${TARORORO_GID:?Use manage.py}"
+  init: true
+  read_only: true
+  cap_drop: [ALL]
+  security_opt: [no-new-privileges:true]
+  tmpfs: ["/tmp:size=16m,mode=1777"]
+  stop_grace_period: 30s
+  logging: &logging
+    driver: local
+    options:
+      max-size: 10m
+      max-file: "3"
+
+services:
+  db:
+    image: postgres:18-alpine@sha256:d3e1620b530c944afa6e887d22eb899824da68e19c52024bf98f5220c88a65b2
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: tarororo
+      POSTGRES_DB: tarororo_test
+      POSTGRES_PASSWORD_FILE: /run/secrets/db-password
+    secrets: [db-password]
+    volumes:
+      - database:/var/lib/postgresql
+    healthcheck:
+      test: [CMD-SHELL, "pg_isready -U tarororo -d tarororo_test"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+    logging: *logging
+
+  api:
+    <<: *app
+    command: [api]
+    restart: unless-stopped
+    ports: ["127.0.0.1:3200:3000"]
+    environment:
+      APP_ENV: test
+      AUTH_MODE: toss
+      HOST: 0.0.0.0
+      PORT: "3000"
+      ALLOWED_ORIGINS: https://tarororo.private-apps.tossmini.com
+      TOSS_MTLS_CERT_PATH: /run/secrets/toss-client.crt
+      TOSS_MTLS_KEY_PATH: /run/secrets/toss-client.key
+    secrets: [db-password, subject-secret, toss-client.crt, toss-client.key]
+    depends_on:
+      db: {condition: service_healthy}
+    healthcheck:
+      test: [CMD, node, -e, "fetch('http://127.0.0.1:3000/health/ready').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+  worker:
+    <<: *app
+    command: [worker]
+    restart: unless-stopped
+    environment:
+      AI_PROVIDER: gemini
+      AI_MODEL: gemini-3.1-flash-lite
+    secrets: [db-password, gemini-api-key]
+    depends_on:
+      db: {condition: service_healthy}
+
+  migrate:
+    <<: *app
+    command: [migrate]
+    profiles: [tools]
+    environment: {APP_ENV: test}
+    secrets: [db-password]
+    depends_on:
+      db: {condition: service_healthy}
+
+  seed:
+    <<: *app
+    command: [seed]
+    profiles: [tools]
+    environment: {APP_ENV: test}
+    secrets: [db-password]
+    depends_on:
+      db: {condition: service_healthy}
+
+volumes:
+  database:
+
+secrets:
+  db-password:
+    file: ${TARORORO_CONFIG_DIR:?Use manage.py}/db-password
+  subject-secret:
+    file: ${TARORORO_CONFIG_DIR:?Use manage.py}/subject-secret
+  gemini-api-key:
+    file: ${TARORORO_CONFIG_DIR:?Use manage.py}/gemini-api-key
+  toss-client.crt:
+    file: ${TARORORO_CONFIG_DIR:?Use manage.py}/toss-client.crt
+  toss-client.key:
+    file: ${TARORORO_CONFIG_DIR:?Use manage.py}/toss-client.key

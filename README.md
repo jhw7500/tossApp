@@ -1,6 +1,6 @@
 # Tarororo 개발
 
-현재 구현은 `feat/backend-foundation` worktree에 있습니다. 이 디렉터리의 코드를 수정해야 실행 중인 개발 화면에 반영됩니다.
+현재 실행 중인 개발 서버는 아래 worktree의 코드를 사용합니다. 이 디렉터리의 코드를 수정해야 개발 화면에 반영됩니다.
 
 ```sh
 cd /home/jhw/ai/opencode/projects/tossApp/.worktrees/backend-foundation
@@ -47,3 +47,7 @@ tmux -L tarororo-live attach -t dev
 ```
 
 개발 경로의 검증 결과는 [실시간 테스트 환경 검증](docs/superpowers/live-development-verification.md)에 기록합니다.
+
+## 독립적인 PC 테스트 배포
+
+토스 QR 테스트용 API·worker·전용 PostgreSQL과 백업/복원은 [PC 테스트 서버 안내](deploy/pc-test/README.md)를 따른다. API는 호스트의 `127.0.0.1:3200`에 바인딩하고, 실제 토스 mTLS 인증서를 준비한 뒤 Tailscale Funnel로 HTTPS를 연결한다. 기존 개발 환경과 테스트 배포는 DB와 실행 프로세스가 분리되어 있다. 현재 완료 여부는 [검증 기록](docs/superpowers/pc-test-server-verification.md)에 있다.
