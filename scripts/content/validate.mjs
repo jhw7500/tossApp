@@ -16,7 +16,8 @@ export const MAX_CONTEXT_BYTES = 64 * 1024;
 export const CONTEXT_LIMIT_NOTE = '이 수치는 원문 후보만 계산하며 실제 질문·상황·카드 위치를 포함한 전체 context 성공을 보장하지 않습니다.';
 
 const SOURCE_KINDS = new Set(['editorial', 'licensed', 'synthetic_test']);
-const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+// Match the runtime evidence UUID format in server/src/ai/validate.ts.
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const POSTGRES_INTEGER_MAX = 2_147_483_647;
 const CONTROL_CHARACTER_PATTERN = /\p{Cc}/u;
 const NUL_CHARACTER_PATTERN = /\u0000/u;
