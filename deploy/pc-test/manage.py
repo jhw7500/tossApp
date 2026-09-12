@@ -220,6 +220,10 @@ class Deployment:
                               "'cards',(SELECT count(*) FROM tarot_cards),'persons',(SELECT count(*) FROM persons),"
                               "'readings',(SELECT count(*) FROM readings),"
                               "'interpretation_versions',(SELECT count(*) FROM interpretation_versions),"
+                              "'usable_questions',(SELECT count(*) FROM questions q "
+                              "JOIN relationship_types r ON r.code=q.relationship_code "
+                              "WHERE q.is_active AND length(r.code) BETWEEN 1 AND 40 "
+                              "AND (SELECT count(*) FROM card_positions p WHERE p.question_id=q.id)=3),"
                               "'readable_cards',(SELECT count(*) FROM tarot_cards c WHERE c.is_selectable AND EXISTS ("
                               "SELECT 1 FROM interpretations i JOIN interpretation_versions v "
                               "ON v.interpretation_id=i.id AND v.version=i.active_version "
@@ -230,6 +234,8 @@ class Deployment:
                 raise ValueError("Restored schema is incomplete")
             if restored["readable_cards"] < 3:
                 raise ValueError("Restored test catalog is incomplete: require three selectable cards with nonblank active interpretations")
+            if restored["usable_questions"] < 1:
+                raise ValueError("Restored test catalog is incomplete: require an active question with a valid relationship and three positions")
             print("Restore verified (test catalog present; pg_restore revalidated constraints): " + counts)
         finally:
             self.compose("exec", "-T", "db", "dropdb", "-U", "tarororo", database)

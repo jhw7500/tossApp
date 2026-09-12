@@ -49,8 +49,17 @@ class RestoreIntegration(unittest.TestCase):
                     self.deployment.restore_check(self.dump)
                 self.assertNotIn("Restore verified", output.getvalue())
 
-    def test_restore_requires_visible_interpretation_text(self):
+    def test_restore_requires_usable_catalog(self):
         self.verify_dump(accepted=False)
+        question = str(uuid4())
+        self.deployment.sql(self.database,
+            "INSERT INTO relationship_types (code,label,sort_order) VALUES ('friendship','Fixture relationship',1);"
+            "INSERT INTO questions (id,relationship_code,prompt,sort_order) VALUES "
+            f"('{question}','friendship','Fixture question',1);")
+        for position in range(1, 4):
+            self.deployment.sql(self.database,
+                "INSERT INTO card_positions (id,question_id,position,label) VALUES "
+                f"('{uuid4()}','{question}',{position},'Fixture position');")
         interpretations = []
         for index in range(3):
             card, interpretation = str(uuid4()), str(uuid4())
@@ -77,6 +86,16 @@ class RestoreIntegration(unittest.TestCase):
                 statements.append("COMMIT;")
                 self.deployment.sql(self.database, "\n".join(statements))
                 self.verify_dump(accepted)
+        for missing, query in [
+                ("valid relationship code", "INSERT INTO relationship_types (code,label,sort_order) "
+                 "VALUES ('','Unsupported fixture',2); UPDATE questions SET relationship_code=''"),
+                ("active question", "UPDATE questions SET relationship_code='friendship', is_active=false"),
+                ("third position", "UPDATE questions SET is_active=true; DELETE FROM card_positions WHERE position=3"),
+                ("question", "DELETE FROM questions"),
+                ("relationship", "DELETE FROM relationship_types")]:
+            with self.subTest(missing=missing):
+                self.deployment.sql(self.database, query)
+                self.verify_dump(accepted=False)
 
 
 if __name__ == "__main__":
